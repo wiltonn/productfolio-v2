@@ -1,6 +1,6 @@
 # ProductFolio V2 Domain Design
 
-This directory contains the authoritative domain model for ProductFolio V2.
+This directory contains the authoritative domain design for ProductFolio V2.
 
 These documents describe the business domain independently of database, API and UI implementation.
 
@@ -20,21 +20,27 @@ The current integrated V2 domain model.
 
 Describes concepts, relationships, cardinality, boundaries and important temporal behaviour.
 
+Do not create this from a single evidence source. Domain synthesis should occur only after V1, workforce-planner and explicit business evidence have been collected independently.
+
 ### ORGANIZATION_MODEL.md
 
 How organizational ownership and workforce structure are represented.
 
-Includes:
+Includes investigation of:
 
-- OEM Division;
-- Product;
+- Commercial Divisions such as OEM, Dealer Solutions, Europe and Financial Services / FSAAS;
+- Product organization;
 - Product Portfolios;
 - Product Workstreams;
 - Product Areas;
-- Engineering;
+- Commercial custom-software teams;
+- Engineering / Shared Technology;
 - Teams;
 - Employees;
-- changing organizational assignments.
+- changing organizational assignments;
+- historical and future-effective relationships.
+
+Organizational ownership must remain distinct from product/capability ownership and work dependency.
 
 ### WORK_MODEL.md
 
@@ -47,11 +53,14 @@ Used to settle concepts such as:
 - Project;
 - WorkItem;
 - planning targets;
-- execution work.
+- execution work;
+- cross-organizational work.
+
+Existing V1 terminology is evidence, not a required V2 hierarchy.
 
 ### WORKFORCE_CAPACITY_MODEL.md
 
-Defines:
+Defines and investigates:
 
 - employee capacity;
 - weekly allocation;
@@ -60,7 +69,38 @@ Defines:
 - availability;
 - planned versus committed capacity;
 - future allocation planning;
-- derived capability supply.
+- derived capability supply;
+- quarterly workforce planning.
+
+### DEMAND_COMMITMENT_MODEL.md
+
+Investigates how market, customer and Commercial Division needs become Product priorities and delivery commitments.
+
+Questions include:
+
+- what constitutes a Commercial need or demand;
+- how requests reach Product;
+- how prioritization is represented;
+- what distinguishes requested work from committed work;
+- how commitments affect quarterly workforce planning;
+- how changes to commitments create downstream planning risk.
+
+Terminology such as `Need`, `Request`, `Demand`, `Priority` and `Commitment` is not yet settled.
+
+### CAPABILITY_DEPENDENCY_MODEL.md
+
+Investigates reusable Product, platform, service and Engineering capabilities and the dependencies on them.
+
+Questions include:
+
+- who owns a durable reusable capability;
+- which teams provide or maintain it;
+- which Commercial Divisions or Product areas consume it;
+- how work depends on Product features or shared services;
+- how dependencies create capacity constraints;
+- how capability ownership differs from organizational ownership.
+
+Do not assume `Capability`, `Product Area`, `Platform`, `Shared Service` or another term is the final abstraction until evidence is reviewed.
 
 ### DOMAIN_INVARIANTS.md
 
@@ -68,15 +108,28 @@ Business rules that must remain true regardless of implementation.
 
 Examples:
 
-- every unit of planned work must ultimately resolve to one top-level investment classification;
+- every unit of planned work/capacity must ultimately resolve to one top-level investment classification;
 - workforce allocations cannot create employee capacity;
-- scenarios must not silently mutate the authoritative baseline.
+- scenarios must not silently mutate the authoritative baseline;
+- organizational ownership must not be used as a substitute for work dependency;
+- something Commercial wants is not automatically something Product has committed to deliver.
 
 ### DOMAIN_EXAMPLES.md
 
 Concrete examples used to test the model.
 
-Examples should include normal cases and difficult edge cases across Product and Engineering.
+Examples should include normal cases and difficult edge cases across:
+
+- Commercial Divisions;
+- Product;
+- Engineering / Shared Technology;
+- custom software;
+- shared capabilities;
+- quarterly planning;
+- cross-organizational dependencies;
+- New Development;
+- Sustain & Maintenance;
+- Tech Debt.
 
 A proposed domain model should be rejected or revised if it cannot represent these examples cleanly.
 
@@ -146,10 +199,35 @@ The objective is not to reproduce either existing implementation.
 
 The objective is to derive the smallest coherent model that accurately represents the business.
 
+Do not choose concepts by majority vote between implementations. Two codebases may contain the same historical mistake.
+
+---
+
+# Evidence Before Synthesis
+
+Preferred sequence:
+
+Original ProductFolio V1  
+→ independent domain extraction
+
+Newer Workforce Planner  
+→ independent workforce/domain evidence extraction
+
+Explicit current business knowledge  
+→ current domain facts and corrections
+
+Then:
+
+All evidence  
+→ domain synthesis  
+→ V2 domain model
+
+Do not allow the first repository inspected to anchor interpretation of subsequent evidence.
+
 ---
 
 # Current Domain North Star
 
 ProductFolio should model:
 
-**Who owns capacity → who provides capacity → what work consumes capacity → what kind of investment that work represents → how allocation changes over time → what portfolio choices are possible.**
+**Who owns capacity → who provides capacity → what business demand exists → what has been committed → what work consumes capacity → what capabilities that work depends on → what type of investment it represents → how allocation changes over time → what constraints and portfolio choices exist.**
