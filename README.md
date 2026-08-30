@@ -13,10 +13,12 @@ Do not begin application implementation until the V2 domain model has been revie
 Current work should focus on:
 
 - domain vocabulary;
-- organizational structure;
+- enterprise and organizational structure;
 - workforce capacity;
 - weekly allocations;
 - work structure;
+- commercial demand and Product commitment;
+- product/capability ownership and dependencies;
 - investment classification;
 - scenarios;
 - capability supply and demand;
@@ -45,11 +47,11 @@ Existing code is evidence, not authority.
 
 ## Product Direction
 
-ProductFolio should model:
-
-**Who owns capacity → who provides capacity → what work consumes capacity → what kind of investment that work represents → how allocation changes over time → what portfolio choices are possible.**
-
 ProductFolio is intended to become an organizational capacity and portfolio decision system.
+
+It should model:
+
+**Who owns capacity → who provides capacity → what business demand exists → what has been committed → what work consumes capacity → what capabilities that work depends on → what type of investment it represents → how allocation changes over time → what constraints and portfolio choices exist.**
 
 It is not intended to become:
 
@@ -59,37 +61,65 @@ It is not intended to become:
 - a detailed task-management system;
 - a timesheet system.
 
-## Known Organizational Context
+## Known Enterprise Context
 
-Current scope begins with the OEM Division.
+ProductFolio must not assume OEM is the organizational root.
 
-OEM contains distinct Product and Engineering operating structures.
+The current operating context contains multiple peer Commercial Divisions, a shared Product organization, and Engineering / Shared Technology capabilities.
 
-Product currently contains six Product Portfolios, each associated with a Product VP.
+Conceptually:
 
-The Product organization conceptually includes:
+Enterprise
 
-OEM Division  
-→ Product  
-→ Product Portfolio  
-→ Product Workstream  
-→ Product Area  
-→ Team  
-→ Employee
+├── Commercial Divisions  
+│   ├── OEM  
+│   ├── Dealer Solutions  
+│   ├── Europe  
+│   └── Financial Services / FSAAS  
+│
+├── Product organization  
+│   └── Product Portfolios (currently six)  
+│       └── Product Workstreams  
+│           └── Product Areas  
+│               └── Teams  
+│                   └── Employees  
+│
+└── Engineering / Shared Technology  
+    └── Functions, shared services and teams to be validated from evidence
 
-Product Areas, teams, leaders and employee assignments may change over time.
+`Product organization` and `Engineering / Shared Technology` describe operating branches. They should not automatically become persisted domain entities.
 
-Engineering capacity exists outside the Product Portfolio hierarchy and must not be forced into fake Product structures.
+Commercial Divisions may contain dedicated custom-software teams. Those teams can own their own capacity while depending on Product-owned features, shared services, platforms, or Engineering capabilities.
+
+Organizational ownership, product/capability ownership, and work dependency are separate domain relationships and must not be collapsed into one hierarchy.
+
+Product Areas, teams, leaders and employee assignments may change over time. Historical and future-effective relationships therefore matter.
+
+## Quarterly Planning Context
+
+Commercial Divisions express customer, market and business needs.
+
+Product groups establish and negotiate priorities against finite Product capacity.
+
+Commercial and Product groups generally need agreement on priorities before each organization can confidently plan resources for the quarter.
+
+A key V2 domain question is therefore how to represent the progression from:
+
+**Commercial need → request/demand → prioritization → agreement/commitment → quarterly workforce planning.**
+
+The exact terminology and lifecycle are not yet settled.
 
 ## Investment Classification
 
-All planned work must ultimately roll up into exactly one of:
+All planned work/capacity must ultimately roll up into exactly one of:
 
 - New Development
 - Sustain & Maintenance
 - Tech Debt
 
-The exact V2 terminology and implementation remain domain-design decisions.
+This is a required enterprise reporting dimension.
+
+It is **not yet decided** whether the classification belongs directly to work, an allocation, a planning container, or is derived through another relationship. Preserve the business invariant without prematurely choosing its implementation owner.
 
 ## Repository Structure
 
@@ -104,3 +134,5 @@ Application code should not be added until the domain model reaches an agreed ba
 Prefer conceptual coherence over compatibility with ProductFolio V1.
 
 Do not preserve a V1 concept merely because code already exists for it.
+
+Do not use organizational hierarchy to represent work dependencies or capability consumption.
