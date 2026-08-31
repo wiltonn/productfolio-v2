@@ -206,3 +206,56 @@ things? Is WorkPackage real or a hypothesis that dies here?
 `workforce-planner/JAGGED_DOMAIN_AREAS.md` `J6`, `J7`, `J20`;
 `workforce-planner/DOMAIN_INVARIANTS_CANDIDATES.md` `I11`–`I13`;
 `workforce-planner/DOMAIN_EXAMPLES.md` `E9`, `E10`, `E13`.
+
+---
+
+## D5 — How a commercial need becomes a product commitment **DECIDED**
+
+**Question** — What are the states, who moves between them, what carries the commitment, and
+what happens when priority changes mid-quarter?
+
+**Context**
+
+- **OBSERVED** — V1 had the structural distinction: `IntakeRequest` and `Initiative` as separate
+  tables with disjoint lifecycles, joined by a one-way conversion freezing a `conversionSnapshot`,
+  under the stated rule *"IntakeRequests do NOT consume capacity. Only Initiatives do."*
+- **OBSERVED BY ABSENCE** — but *commitment* appears nowhere as a domain term. There are four
+  unrelated things called APPROVED, none a promise to a requester, and commitment was read from
+  an allocation row existing. V1 built an "intake leakage" KPI to measure planned work nobody
+  requested.
+- **OBSERVED BY ABSENCE** — no requesting organization anywhere: requester and sponsor point at
+  individual users, both nullable.
+- **OBSERVED** — a request could carry only a T-shirt size; real sizing happened after
+  conversion, so *what would it cost to say yes to everything?* had no answer.
+- **OBSERVED** — priority lived on the plan as unvalidated JSON, quarter-scoped, invisible to
+  requesters, dying with the scenario, and doubling as an admission list.
+
+**Decisions**
+
+1. **Need and WorkPackage are separate concepts, related many-to-many.** One Need may take
+   several WorkPackages — including packages owned by different organizations — and one package
+   may serve several Needs. Rejected: treating the ask as a WorkPackage in an early state.
+2. **A Need carries its own coarse magnitude**, alongside the capability-shaped demand on
+   WorkPackages. Two magnitudes at deliberately different fidelities, never summed and never
+   reconciled. Rejected: deriving a Need's size only from linked packages, which would require
+   scoping everything in order to prioritise anything.
+3. **A Commitment is its own record with terms**, frozen when made while the Need stays
+   editable. Rejected: a state flag on the Need, which cannot carry terms; and inference from
+   allocation, which §25 forbids.
+4. **Product holds a single prioritized ranking** across all requesting organizations. Needs
+   carry signals — urgency, value, customer impact — that inform it without being a second rank.
+5. **The ask is called a Need.** "Demand" was unavailable: it already means the capacity and
+   capability a WorkPackage requires (D4).
+
+**Consequences**
+
+- A Need now has a requesting organization, closing the largest recorded gap against §4–§9.
+- A mid-quarter priority change cannot silently void a promise: commitments are records, so the
+  change obliges renegotiation rather than quiet disappearance.
+- **Accepted cost of decision 4** — a requesting organization cannot express relative importance
+  among its own Needs, and cannot read its position from the model.
+- A Commitment's states, and what happens to one at a quarter boundary, are newly specifiable —
+  raised as their own ticket.
+
+**Evidence** — `original-productfolio/demand-commitment.md`;
+`workforce-planner/JAGGED_DOMAIN_AREAS.md` `J20`; CLAUDE.md §9, §22.

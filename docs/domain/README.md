@@ -62,6 +62,12 @@ Defines:
 - future allocation planning;
 - derived capability supply.
 
+### DEMAND_COMMITMENT_MODEL.md
+
+How a commercial need becomes something Product has promised to deliver.
+
+Covers Need, Commitment, the requesting organization, the two magnitudes, and priority.
+
 ### DOMAIN_INVARIANTS.md
 
 Business rules that must remain true regardless of implementation.

@@ -164,6 +164,51 @@ Both hang off the WorkPackage, so "is this adequately staffed, and in which capa
 short?" is answerable. In both existing implementations these lived in unrelated tables that no
 code compared (`J20`).
 
+## X12 — One Need, three WorkPackages, three organizations
+
+```
+Need: "Dealers can quote finance at point of sale"
+  requesting organization: Dealer Solutions
+  coarse estimate: ~2 quarters
+  signals: urgency HIGH, named customer commitment
+
+satisfied by
+  WorkPackage "Quoting API"           owner: a Product Area
+  WorkPackage "Dealer portal surface"  owner: Dealer Solutions custom software
+  WorkPackage "Rate service uplift"    owner: an Engineering platform team
+```
+
+The Need belongs to Dealer Solutions; none of the three packages does, and no owning unit
+becomes part of Dealer Solutions by contributing. Compare `X9`, which shows the same shape from
+the capacity side.
+
+## X13 — A Commitment covering part of a Need
+
+```
+Commitment
+  answers:  "Dealers can quote finance at point of sale"
+  covers:   the Quoting API and the Rate service uplift
+  period:   Q3
+  agreed:   Product VP (Payments) with the Dealer Solutions lead
+  frozen at agreement; the Need remains editable
+```
+
+The dealer portal surface is not committed for Q3. The Need is therefore **partly met**, and
+stays visible as such — the state V1 could not express, having no commitment concept and four
+unrelated things called APPROVED.
+
+## X14 — Planned work nobody asked for
+
+```
+WorkPackage "Search index rebuild"
+  demand and allocations present
+  no Commitment, no Need
+```
+
+Legal and visible. It is simply work Product chose to do, distinguishable from committed work
+because commitment is a record rather than an inference. **OBSERVED** — V1 needed a dedicated
+"intake leakage" metric to find this case at all.
+
 ---
 
 ## Examples still to be added

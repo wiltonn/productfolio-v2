@@ -187,3 +187,41 @@ supply to be comparable.
 rather than a separate body of work.
 
 **Rejected by** — D4.
+
+---
+
+## Commitment inferred from allocation
+
+**What it was** — Treating work as committed because capacity had been allocated to it.
+
+**Why rejected** — §25 forbids important state inferred from accidental record existence. It also
+cannot represent the two cases that matter: work planned that nobody asked for, and a promise
+made that has not yet been staffed. **OBSERVED** — V1 needed an "intake leakage" metric precisely
+to detect the first of these, which is the symptom of the missing concept.
+
+**Rejected by** — D5. A Commitment is its own record with terms.
+
+---
+
+## Priority as a property of the plan
+
+**What it was** — `Scenario.priorityRankings`: an ordinal ranking living on the quarterly plan.
+
+**Why rejected** — It dies with the plan, is scoped to one quarter, is invisible to the
+requester, and doubles as an admission list: **OBSERVED**, unranked work carried *zero* demand
+rather than low priority. Priority belongs to the demand conversation, not to a plan artefact.
+
+**Rejected by** — D5. Product holds a single durable ranking across requesting organizations.
+
+---
+
+## The ask as an early state of the work
+
+**What it was** — One record that begins life as a request and becomes the body of work, with a
+lifecycle carrying the want-versus-committed distinction.
+
+**Why rejected** — A Need and the work that answers it have different owners, different
+lifecycles and different editability, and they do not correspond one-to-one: a Need may require
+several WorkPackages across several organizations, and a package may serve several Needs.
+
+**Rejected by** — D5.

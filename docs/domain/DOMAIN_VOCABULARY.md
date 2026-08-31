@@ -134,6 +134,29 @@ An organizational unit providing capacity to a WorkPackage, through the Allocati
 people. Contributing capacity to work never makes a unit organizationally part of the work's
 sponsor.
 
+### Need
+
+Something a requesting organization wants — a market, customer or business requirement. A Need
+has a **requesting organization**, carries a coarse magnitude for triage, and carries signals
+(urgency, customer impact, business value) that inform prioritization without being a rank.
+
+A Need is not a WorkPackage in an early state. A Need may require several WorkPackages, and a
+WorkPackage may serve several Needs.
+
+### Commitment
+
+A promise by a delivering organization to meet a Need, on stated terms: what was agreed, for
+which period, by whom, to whom. A Commitment is **frozen when made**, while the Need it answers
+remains editable. It may cover part of a Need or span several.
+
+A Commitment is never inferred from the existence of an allocation.
+
+### Priority
+
+A single ranking, held by Product, across all requesting organizations. Needs carry signals that
+inform it; a requesting organization does not maintain its own ranking in the model.
+
+
 ---
 
 ## Deliberately unsettled
@@ -141,6 +164,5 @@ sponsor.
 These terms are open questions, not vocabulary. Do not use them as though settled; say which
 sense you mean and flag it.
 
-- **Request · Demand · Commitment · Priority · Need** — the commercial-to-product lifecycle (§9).
 - **Skill · Capability · Job Profile · Role · Discipline** — the capability model (§20).
 - **Token** — whether the term survives at all (§21).
