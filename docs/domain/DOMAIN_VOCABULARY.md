@@ -15,8 +15,37 @@ An individual source of workforce capacity.
 
 ### Capacity
 
-The working time an Employee has available. Capacity belongs to the Employee, is finite, and
-varies over time.
+The working time an Employee has. Capacity belongs to the Employee, is finite, varies over
+time, and is **time only** — it is never discounted by how effectively that time is used.
+
+### Contracted capacity
+
+An Employee's own working week. It is the denominator of every allocation percentage: 100%
+means all of *this* Employee's week, not a nominal full-time week.
+
+### Absence
+
+Capacity the organization does not have — leave, holiday, statutory time away. Absence is the
+only thing that reduces an Employee's capacity.
+
+### Available capacity
+
+Contracted capacity less Absence. The time the organization actually has from an Employee.
+
+### Unallocated capacity
+
+Available capacity not yet spent on work. Real headroom.
+
+### Overhead
+
+Not a domain concept. Management duty, administration and other non-delivery obligations are
+**work**, and are allocated like any other work — see [[rejected-overhead-as-capacity-reduction]]
+in `REJECTED_CONCEPTS.md`.
+
+### FTE
+
+An Employee's capacity expressed against a standard full-time week, so people can be compared
+and summed across a team. A derived reporting conversion, never the planning unit.
 
 ### Membership
 

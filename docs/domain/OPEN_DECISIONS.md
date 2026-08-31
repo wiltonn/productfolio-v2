@@ -60,3 +60,52 @@ relationship, which §8 forbids.
 
 **Evidence** — `original-productfolio/allocation-capacity.md`,
 `original-productfolio/organization.md`, `workforce-planner/JAGGED_DOMAIN_AREAS.md` `J1`.
+
+---
+
+## D2 — Nominal capacity versus deployable capacity **DECIDED**
+
+**Question** — What does an allocation percentage measure, what reduces capacity, and which of
+nominal / contracted / available / deployable the domain needs as distinct concepts.
+
+**Context** — V1 used **three different denominators for one stored percentage**: the write path
+converted against `hoursPerWeek × 13`, the read path preferred `CapacityCalendar.hoursAvailable`,
+and the over-allocation check compared against a bare literal `100` (**OBSERVED**). Nothing
+reconciled them. The newer implementation has a single `capacityPct ?? 100` designed, documented
+and tested for this problem, which **no production caller ever passes** (`J9`) — so it too is
+always the literal 100.
+
+The two codebases also mean different things by "deployable": the newer one means capacity that
+can go to work (`DEPLOYABLE` / `OVERHEAD` / `UNAVAILABLE`); V1 meant
+`effectiveHours = allocated × proficiency × buffer × ramp`, a productivity discount that is a
+property of the person-and-work pairing and was never persisted.
+
+**Decisions**
+
+1. **100% means the Employee's own contracted week.** A half-time Employee planned at 100% is
+   fully committed. FTE becomes a derived conversion for cross-person roll-ups, not the planning
+   unit. Rejected: a nominal full-time denominator, under which a part-timer can never register
+   as over-allocated.
+2. **Absence is the only thing that reduces capacity. Overhead is work.** Management duty and
+   administration are allocated like any other work rather than deducted. Rejected: the
+   `OVERHEAD` / `UNAVAILABLE` split, whose distinction the newer build states and never uses
+   (`E7` — both are summed into `reserved` with no branch).
+3. **Capacity is time, never discounted by effectiveness.** Proficiency, ramp and buffer describe
+   how much gets done, not how much time exists. If they matter they attach to the
+   person-and-work match through the capability model.
+
+**Consequences**
+
+- `available = contracted − absence`; `unallocated = available − allocated`. **`I3` dissolves**:
+  "unallocated is not the same as available" was true only because overhead was modelled as a
+  capacity reduction. It is now derivable rather than a standing rule, and must be restated
+  rather than promoted — carried by *Which invariant candidates are real?*
+- Over-allocation is measured against the Employee's own available week, never a literal 100.
+  Both existing implementations get this wrong for part-time Employees.
+- §11 must accommodate management and administrative work, which is capacity spent but is not
+  obviously one of the three investment classes. §16's own example hints at a residual with its
+  "Remaining / Other 10%" line. Carried by *What owns investment classification?*
+
+**Evidence** — `workforce-planner/DOMAIN_INVARIANTS_CANDIDATES.md` `I1`–`I3`;
+`workforce-planner/JAGGED_DOMAIN_AREAS.md` `J9`, `J10`; `workforce-planner/DOMAIN_EXAMPLES.md`
+`E4`–`E7`; `original-productfolio/allocation-capacity.md` §(b).
