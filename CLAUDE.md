@@ -1130,3 +1130,19 @@ ProductFolio V2 should model:
 The system should model organizational reality first.
 
 Software architecture comes afterward.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues in `wiltonn/productfolio-v2`, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use their default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Authoritative domain design lives under `docs/domain/`; there is no root `CONTEXT.md` and no `docs/adr/`. See `docs/agents/domain.md`.
