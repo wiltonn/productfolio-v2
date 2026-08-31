@@ -135,10 +135,34 @@ An OEM customer capability draws capacity from:
   A shared platform team     (under Engineering)
 ```
 
-Three Memberships in three branches; three sets of Allocations to one body of work. No unit
-becomes organizationally part of another, and no contributing team is owned by the sponsor. The
-work model that carries "one body of work" is still unsettled — see *Does WorkPackage exist, and
-do Initiative and Project both survive?*
+Three Memberships in three branches; three sets of Allocations to **one WorkPackage**. No unit
+becomes organizationally part of another, and no contributing team is owned by the sponsor.
+
+## X10 — Ongoing product work is a WorkPackage
+
+```
+WorkPackage: "Content parser maintenance"
+  no sponsor initiative, no end date framing
+  allocations: 100% of one engineer, ongoing
+```
+
+*Derived from `E13`, which the evidence calls the case the newer implementation was largely
+built to represent — and which that implementation then structurally excluded from "strategic"
+because it belonged to no Initiative.* Under V2 there is no such exclusion: it is a WorkPackage
+like any other, and how it classifies as investment is a separate question.
+
+## X11 — Demand and supply on the same record
+
+```
+WorkPackage: "Dealer portal launch"
+  Demand:   backend   3 person-weeks
+            design    2 person-weeks
+  Supply:   allocations from the OEM Custom Software team and a Product team
+```
+
+Both hang off the WorkPackage, so "is this adequately staffed, and in which capability is it
+short?" is answerable. In both existing implementations these lived in unrelated tables that no
+code compared (`J20`).
 
 ---
 

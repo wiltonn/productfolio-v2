@@ -140,3 +140,50 @@ and its own, ragged, depth. Borrowing Product's levels would assert a shape Engi
 have and make "capacity by Product Portfolio" silently wrong.
 
 **Rejected by** — D3.
+
+---
+
+## WorkItem as a planning concept
+
+**What it was** — A unit of work beneath the capacity-planning unit: a Jira epic, story, feature,
+task or defect, modelled inside ProductFolio.
+
+**Why rejected** — The only such level ever built was created by a `NOT NULL` foreign key, not by
+a workflow — the newer implementation's own schema comment says `WorkItem` exists because
+`ScopeItem.initiativeId` cannot be null. The original ran with nothing below its planning unit.
+§13 also directs that managers not plan at ticket-level precision, so a level the model never
+plans at earns only a reconciliation burden.
+
+**What survives** — Execution detail still exists; it lives in the delivery tools.
+
+**Rejected by** — D4.
+
+---
+
+## Initiative and Project as separate concepts
+
+**What it was** — Two container concepts: a strategic, temporary Initiative and an optional
+Project execution container beneath or beside it.
+
+**Why rejected** — They are behaviourally interchangeable (`J7`): same container shape, same
+targeting, same attribution, same retirement. The distinction is asserted in a PRD and encoded
+nowhere, and `Project` never received an admin UI. The original shipped only `Initiative`.
+
+**Rejected by** — D4. Both retire in favour of WorkPackage.
+
+---
+
+## A separate estimation grain
+
+**What it was** — `ScopeItem`: a finer record beneath the planning unit carrying the estimates,
+skill demand and P50/P90 figures.
+
+**Why rejected** — It splits demand from supply across records that nothing reconciles. `J20`
+records the consequence in both implementations: demand hours and allocation hours in unrelated
+tables, printed side by side by an endpoint that never compares them. §22 requires demand and
+supply to be comparable.
+
+**What survives** — Demand shaped by capability. It is a property of the WorkPackage's demand
+rather than a separate body of work.
+
+**Rejected by** — D4.

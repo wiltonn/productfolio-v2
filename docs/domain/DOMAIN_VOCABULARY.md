@@ -114,6 +114,26 @@ borrowing Product's levels. Its depth varies by group.
 
 A relatively stable unit that owns people. Teams exist in every branch.
 
+### WorkPackage
+
+A meaningful body of work against which capacity is planned — a capability launch, a migration,
+a regulatory change, a sustain effort, a tech-debt effort, a custom software delivery.
+
+ProductFolio models exactly one level of work. There is no concept beneath a WorkPackage:
+execution detail lives in the delivery tools. A WorkPackage has no subtype — "Initiative" and
+"Project" are not V2 concepts.
+
+### Demand
+
+The capacity and capability required to accomplish a WorkPackage. Demand belongs to the
+WorkPackage and may be shaped by capability, so that it can be compared against supply.
+
+### Contribution
+
+An organizational unit providing capacity to a WorkPackage, through the Allocations of its
+people. Contributing capacity to work never makes a unit organizationally part of the work's
+sponsor.
+
 ---
 
 ## Deliberately unsettled
@@ -122,6 +142,5 @@ These terms are open questions, not vocabulary. Do not use them as though settle
 sense you mean and flag it.
 
 - **Request · Demand · Commitment · Priority · Need** — the commercial-to-product lifecycle (§9).
-- **WorkPackage · WorkItem** — the work model (§12–§13).
 - **Skill · Capability · Job Profile · Role · Discipline** — the capability model (§20).
 - **Token** — whether the term survives at all (§21).

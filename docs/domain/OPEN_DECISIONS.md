@@ -156,3 +156,53 @@ outranks both codebases anyway.
 
 **Evidence** — `original-productfolio/organization.md`;
 `workforce-planner/ORGANIZATION_SEMANTICS.md` §0; `workforce-planner/JAGGED_DOMAIN_AREAS.md` `J4`.
+
+---
+
+## D4 — Does WorkPackage exist, and do Initiative and Project both survive? **DECIDED**
+
+**Question** — What is the unit against which capacity is planned, what is the unit of
+execution, and are they the same concept at different granularities or genuinely different
+things? Is WorkPackage real or a hypothesis that dies here?
+
+**Context**
+
+- **OBSERVED** — The original ProductFolio had no `Product`, `Project` or `WorkItem` (zero hits
+  repo-wide for `WorkItem`). It shipped `IntakeRequest → Initiative → ScopeItem`.
+- **OBSERVED** — In the newer implementation `WorkItem` exists *because* `ScopeItem.initiativeId`
+  is `NOT NULL`, per its own schema comment, and stays thin because a second set of demand
+  numbers *"would immediately diverge"*.
+- **OBSERVED** — `Project` and `Initiative` are behaviourally interchangeable (`J7`); the PRD's
+  asserted distinction is never encoded, and `Project` has no admin UI.
+- **OBSERVED** — In neither implementation is the estimated record the staffed record, and in
+  neither are the two reconciled (`J20`).
+
+**Decisions**
+
+1. **One level of work.** ProductFolio models the planning unit only; execution detail lives in
+   the delivery tools. Rejected: a planning-unit/execution-unit split, on the evidence that the
+   only such level ever built was produced by a foreign key rather than a workflow.
+2. **WorkPackage is the concept, and it has no subtype.** Initiative and Project both retire.
+   Rejected: keeping the name "Initiative", whose strategic/temporary connotation makes ongoing
+   product work — the case the newer build most needed (`E13`) — awkward to file.
+3. **Demand belongs to the WorkPackage** and may be shaped by capability. That breakdown is a
+   property of the package's demand, not a separate body of work. Rejected: a finer estimation
+   record beneath the package, which would reintroduce a second grain immediately.
+
+**Consequences**
+
+- §22's requirement that demand and supply be comparable becomes achievable: both now hang off
+  the same record, which is precisely what both implementations failed to arrange.
+- The §14 cross-organization case is now fully representable — one WorkPackage, contributions
+  from units in any branch. See `X9`.
+- A WorkPackage's lifecycle is newly specifiable and is not settled here — raised as its own
+  ticket. **OBSERVED** — empirical forecasting depends on a durable transition log on the
+  planning unit, and its cycle-time clock starts at capacity commitment rather than at proposal.
+- **UNKNOWN** — whether "WorkPackage" is language the organization actually uses. If a phrase
+  already exists for "a meaningful body of work we staff", it beats an invented term under §25's
+  test 5.
+
+**Evidence** — `original-productfolio/work-model.md`;
+`workforce-planner/JAGGED_DOMAIN_AREAS.md` `J6`, `J7`, `J20`;
+`workforce-planner/DOMAIN_INVARIANTS_CANDIDATES.md` `I11`–`I13`;
+`workforce-planner/DOMAIN_EXAMPLES.md` `E9`, `E10`, `E13`.
