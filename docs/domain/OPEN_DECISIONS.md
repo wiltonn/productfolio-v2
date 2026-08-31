@@ -109,3 +109,50 @@ property of the person-and-work pairing and was never persisted.
 **Evidence** — `workforce-planner/DOMAIN_INVARIANTS_CANDIDATES.md` `I1`–`I3`;
 `workforce-planner/JAGGED_DOMAIN_AREAS.md` `J9`, `J10`; `workforce-planner/DOMAIN_EXAMPLES.md`
 `E4`–`E7`; `original-productfolio/allocation-capacity.md` §(b).
+
+---
+
+## D3 — How many organizational structures, and what shape is Engineering? **DECIDED**
+
+**Question** — One typed tree, several distinct structures, or a shared abstraction with a shape
+per branch? Does Engineering have an intermediate grouping? Do Commercial Divisions have
+internal structure the model must see?
+
+**Context** — The evidence cannot answer this. **OBSERVED** — neither implementation has any
+Product/Engineering distinction: no enum member, no column, no branch, no test. Both model one
+undifferentiated tree with a type tag. V1's nine-member `OrgNodeType` gates exactly one thing
+(`ROOT`), performs no parent-type validation, and four of its members were appended a day after
+the rest inside a matrix-org migration with no supporting code, test or UI. "Engineering" appears
+in either codebase only as an example team name. The workforce-planner source is unreachable, so
+no further archaeology is possible. This decision rests on explicit business statement, which
+outranks both codebases anyway.
+
+**Decisions**
+
+1. **One organizational structure**: a single tree of Organizational Units rooted at the
+   Enterprise, with Commercial Divisions, Product and Engineering as peer branches. OEM is a
+   Commercial Division, not the root.
+2. **The type labels, it does not constrain.** No composition grammar: the model does not declare
+   what may contain what. Rejected: a per-branch grammar making the type a real constraint.
+   Reason for the choice — §7 requires Engineering's structure to be investigated rather than
+   assumed and §26 warns that organizational relationships move, so encoding a grammar now would
+   fix a hierarchy that has not been validated.
+3. **Engineering's depth varies by group.** Some functions have an intermediate grouping between
+   the function and its teams; others go straight to teams. Depth is data, not model.
+4. **Commercial Divisions are modelled as deep as their capacity goes.** Dedicated software and
+   delivery teams are units; sales, go-to-market and commercial operations are not modelled.
+
+**Consequences**
+
+- Shape correctness is a property of the data rather than of the model. Nothing prevents a
+  Division under a Team. Both existing implementations made this same choice and their type tags
+  went decorative — that is the known failure mode, and the mitigation is data validation plus
+  revisiting this decision if the type stops meaning anything.
+- §5 and §14 stay answerable: an OEM custom-software team is a real unit that can contribute
+  capacity alongside Product and Engineering without OEM's commercial functions appearing.
+- Resolves the open question of what the model does with the assumption that OEM was the root:
+  it is a Commercial Division beneath the Enterprise, and nothing above a Division is
+  division-specific.
+
+**Evidence** — `original-productfolio/organization.md`;
+`workforce-planner/ORGANIZATION_SEMANTICS.md` §0; `workforce-planner/JAGGED_DOMAIN_AREAS.md` `J4`.

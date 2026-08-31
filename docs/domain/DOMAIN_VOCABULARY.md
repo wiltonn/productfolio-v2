@@ -78,6 +78,42 @@ about supply is answered from Membership.
 The capacity spent on work, derived from Allocations. A question about what capacity went to is
 answered from Allocation, never from Membership.
 
+### Organizational Unit
+
+Any node in the enterprise's organizational structure — a Commercial Division, a Product
+Portfolio, a Product Workstream, a Product Area, an Engineering Function, a Team. All units are
+the same kind of thing; a unit's **type** says what it is, for reading and roll-up, and does not
+constrain what may contain what.
+
+### Enterprise
+
+The root of the organizational structure. Commercial Divisions, the Product organization and
+Engineering are peer branches beneath it. No Commercial Division is the root — OEM included.
+
+### Commercial Division
+
+A durable commercial/business organizational boundary. Modelled as deep as its capacity goes:
+units owning people whose weeks are planned here are represented; sales and go-to-market
+functions are not.
+
+### Product Portfolio · Product Workstream · Product Area
+
+The Product organization's unit types, in containment order as normally arranged. A Product
+Portfolio is an executive Product boundary led by a Product VP; a Product Workstream is a
+grouping within one; a Product Area is a durable Product responsibility.
+
+"Workstream" refers to Product organizational structure and nothing else. It is never a generic
+synonym for work.
+
+### Engineering Function
+
+An Engineering unit type. Engineering is a peer branch of Product, never represented by
+borrowing Product's levels. Its depth varies by group.
+
+### Team
+
+A relatively stable unit that owns people. Teams exist in every branch.
+
 ---
 
 ## Deliberately unsettled
@@ -89,5 +125,3 @@ sense you mean and flag it.
 - **WorkPackage · WorkItem** — the work model (§12–§13).
 - **Skill · Capability · Job Profile · Role · Discipline** — the capability model (§20).
 - **Token** — whether the term survives at all (§21).
-- **Product Area · Product Workstream · Product Portfolio** — named in the brief as
-  organizational structure (§6), but their model is not yet settled.

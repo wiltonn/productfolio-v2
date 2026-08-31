@@ -106,3 +106,37 @@ persisted and every multiplier defaulted off.
 to the person-and-work match through the capability model, never to the Employee's capacity.
 
 **Rejected by** — D2.
+
+---
+
+## A composition grammar on organizational units
+
+**What it was** — Making a unit's type constrain what it may contain: Product Portfolio contains
+Workstream contains Area contains Team, with Engineering and Commercial declaring their own
+shapes, enforced by the model.
+
+**Why declined** — §7 requires Engineering's real structure to be investigated rather than
+assumed, and §26 warns that organizational relationships move. A grammar written now would fix a
+hierarchy that has not been validated.
+
+**The accepted cost** — the type is a label, so shape correctness rests on the data. Both
+existing implementations chose this and their type tags went decorative: V1's `OrgNodeType`
+gates only `ROOT` and validates no parent type at all.
+
+**Revisit if** — the type stops carrying meaning in practice, or invalid shapes appear in real
+data. This is a deferral with a stated risk, not a permanent exclusion.
+
+**Declined by** — D3.
+
+---
+
+## Representing Engineering with Product's levels
+
+**What it was** — Creating Product Portfolios, Product Workstreams or Product Areas to stand in
+for Engineering structure, so that one hierarchy covers everyone.
+
+**Why rejected** — §7 forbids it outright. Engineering is a peer branch with its own unit types
+and its own, ragged, depth. Borrowing Product's levels would assert a shape Engineering does not
+have and make "capacity by Product Portfolio" silently wrong.
+
+**Rejected by** — D3.

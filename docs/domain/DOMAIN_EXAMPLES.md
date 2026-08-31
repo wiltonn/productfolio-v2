@@ -94,6 +94,52 @@ Employee: Membership in Engineering
 Engineering owns 1.0 FTE of supply. OEM consumes 0.7 of it. Neither statement makes the
 Employee organizationally part of OEM. See `ORGANIZATION_MODEL.md`.
 
+## X7 — Engineering's ragged depth
+
+```
+Enterprise
+└── Engineering
+    ├── Platform Engineering  (Engineering Function)
+    │   ├── Infrastructure Group        ← intermediate grouping
+    │   │   └── Networking Team
+    │   └── Data Group
+    │       └── Pipelines Team
+    └── Developer Experience  (Engineering Function)
+        └── Tooling Team                ← no intermediate grouping
+```
+
+Both branches are legal. Depth is a property of the data, not a rule of the model, so one
+Engineering Function may have a group layer while its sibling does not.
+
+## X8 — A Commercial Division modelled only as deep as its capacity
+
+```
+Enterprise
+└── OEM  (Commercial Division)
+    └── OEM Custom Software  (Team)      ← owns people whose weeks are planned
+    ✗ OEM Sales                          ← not modelled
+    ✗ OEM Commercial Operations          ← not modelled
+```
+
+The Division is a real unit and so is its software team. Its go-to-market functions own people
+this system does not plan, so representing them would add structure that answers no question.
+
+## X9 — One capability, four contributing organizations
+
+*The §14 case, expressible once X6 and X8 hold.*
+
+```
+An OEM customer capability draws capacity from:
+  OEM Custom Software        (Team, under a Commercial Division)
+  A Product Area's team      (under Product)
+  A shared platform team     (under Engineering)
+```
+
+Three Memberships in three branches; three sets of Allocations to one body of work. No unit
+becomes organizationally part of another, and no contributing team is owned by the sponsor. The
+work model that carries "one body of work" is still unsettled — see *Does WorkPackage exist, and
+do Initiative and Project both survive?*
+
 ---
 
 ## Examples still to be added
