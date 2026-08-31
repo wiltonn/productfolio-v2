@@ -113,6 +113,33 @@ Important concepts or structures deliberately excluded from V2.
 
 Record why they were rejected so they are not accidentally reintroduced later.
 
+### evidence/workforce-planner/
+
+Deep evidence from the workforce-planner implementation branch, including selected contrasts
+with the original model. This is §29's second evidence stream.
+
+Start with:
+
+- `evidence/workforce-planner/README.md` for scope and evidence labels;
+- `evidence/workforce-planner/SOURCE_MANIFEST.md` for reproducibility status;
+- `evidence/workforce-planner/COVERAGE_MATRIX.md` for missing evidence streams; and
+- `evidence/workforce-planner/NEXT_STEPS_USING_MATTPOCOCK_SKILLS.md` for the staged continuation plan.
+
+
+### evidence/original-productfolio/
+
+Targeted evidence from the original ProductFolio implementation — §29's first evidence stream.
+Surveyed at `wiltonn/productfolio` `e62c2d7` (`main`) and `07368d6` (`v1/solver`), including the
+`feat/L1`–`L4` solver branches. Unlike the workforce-planner package, these citations are
+reproducible against source.
+
+Extracted to answer specific decisions on the domain map rather than to mirror a full evidence
+set: `work-model.md`, `organization.md`, `allocation-capacity.md`, `capability-token-solver.md`,
+`demand-commitment.md`, `scenario-baseline-time.md`.
+
+The two evidence directories are kept separate deliberately (§29). Do not merge them, and state
+which stream any citation comes from.
+
 ---
 
 # Evidence Labels
