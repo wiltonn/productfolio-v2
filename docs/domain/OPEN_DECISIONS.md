@@ -113,15 +113,22 @@ sequencing, formal baseline approval/revision, and multi-team contributions to o
 WorkPackage (the first slice records each WorkPackage's estimate as *this team's*
 contribution). See `CLAUDE.md` for the implementation conventions.
 
-### D15 — Feasible-verdict prerequisites and the team-quarter reassessment rule — **DECIDED** (review of PR #24)
+### D15 — Feasible-verdict prerequisites and the team-quarter reassessment rule — **DECIDED** (review of PR #24, revised)
 A feasible verdict is refused unless capacity is assigned, the team has net delivery
 capacity the assignment fits within, the team-quarter has no shortfall, and any partial
-assignment states its reduced scope; a negative verdict is always recordable. Every judgment
-is stored with its team-quarter context (estimate, assignment, net delivery capacity,
-reserve, shortfall) and needs reassessment when any of these materially changes — including
-competing assignments that create or worsen a shortfall — but not on no-op or undone edits.
-History is preserved. Supersedes the slice-1 rule that only the package's own estimate or
-assignment timestamp invalidated a judgment. Home: `QUARTERLY_PLANNING_MODEL.md`.
+assignment states its reduced scope; a negative verdict is always recordable.
+Reassessment is driven by a **durable change log of planning inputs**, not by comparing
+totals: each team-quarter appends an entry for every material change (people, schedules,
+absences, holidays, overhead, reserve, *any* assignment — competing ones included even when
+totals still fit — and a package's own estimate), a judgment records the log position it
+was made at, and it needs reassessment until a fresh judgment is recorded. Reverting a
+change or restoring the totals never revives a judgment; a save that changes nothing logs
+nothing. History is preserved.
+*Rejected on the way here:* (1) timestamp-only invalidation on the package's own edits,
+which missed team-level changes; (2) comparing the current totals against a snapshot taken
+at judgment time, which silently reactivated a judgment when an equal-capacity replacement
+was added for an absent specialist the lead had relied on. Home:
+`QUARTERLY_PLANNING_MODEL.md`.
 
 ---
 

@@ -83,6 +83,25 @@ rejected; what is rejected is *requiring* that precision to plan a quarter.)
 
 ---
 
+## Reviving a feasibility judgment because the totals match again
+
+**What it was** — Deciding whether a judgment is current by comparing the team-quarter's
+present totals (net delivery capacity, reserve, shortfall, the package's estimate and
+assignment) against a snapshot taken when it was recorded.
+
+**Why rejected** — Totals can be restored while the assumptions cannot. A lead judges work
+feasible on a named specialist's availability; the specialist goes on leave; an
+equal-capacity person is added. The totals match the snapshot again and the judgment
+silently returns to Feasible with the specialist still absent. Feasibility is a human
+judgment about specific inputs, so invalidation must follow changes to those inputs and
+persist until a human re-judges.
+
+**What survives** — The figures at judgment time are still stored, for the record.
+
+**Rejected by** — D15 (revised).
+
+---
+
 ## Pre-reset rejections still in force
 
 Condensed; full text at the checkpoint tag.

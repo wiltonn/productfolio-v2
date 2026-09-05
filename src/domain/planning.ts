@@ -6,8 +6,8 @@
  * Negative headroom is a shortfall and is reported, never adjusted away. Feasibility is a
  * recorded technical-lead judgment; the arithmetic here never confers it. It does two
  * things around a judgment: it refuses a *feasible* verdict whose capacity prerequisites
- * are not met, and it flags a judgment for reassessment when the team-quarter context it
- * was made in has materially changed.
+ * are not met, and it flags a judgment for reassessment when the team-quarter's planning
+ * inputs have changed since it was made — durably, until a fresh judgment is recorded.
  */
 
 export const CATEGORIES = ['New Development', 'Sustain & Maintenance', 'Tech Debt'] as const;
@@ -43,8 +43,26 @@ export interface FeasibilityJudgment {
   judgedAt: string;
   assumptions: string;
   scopeNote: string;
-  /** null only for judgments recorded before contexts were captured; treated as stale. */
+  /** The figures at the time of judgment, kept for the record. null for pre-D15 rows. */
   context: JudgmentContext | null;
+  /**
+   * Position in the team-quarter change log when the judgment was made: the id of the
+   * latest change then recorded (0 if none). null for rows recorded before change
+   * tracking; such judgments are always stale.
+   */
+  planChangeId: number | null;
+}
+
+/**
+ * One material change to a team-quarter's planning inputs, appended durably when it
+ * happens. Ids only ever grow, so undoing a change is itself a further change.
+ */
+export interface PlanChange {
+  id: number;
+  /** Set when the change concerns one WorkPackage only (its own estimate). */
+  workPackageId: number | null;
+  changedAt: string;
+  description: string;
 }
 
 export interface WorkPackagePlan {
@@ -101,28 +119,29 @@ export const MATERIAL_CHANGE_EW = 0.005;
 
 const fmt = (n: number) => n.toFixed(1);
 
+/** Whether two engineer-week quantities differ materially. */
+export function differsMaterially(a: number, b: number): boolean {
+  return Math.abs(a - b) > MATERIAL_CHANGE_EW;
+}
+
 /**
- * Why a judgment's context no longer matches the plan. Empty when nothing material has
- * changed — including after edits that were undone or that re-saved the same value.
- *
- * Competing assignments are material only when they create or worsen a team shortfall:
- * other work claiming free headroom does not undermine this package's judgment, but
- * claiming capacity the team does not have does.
+ * The changes to a team-quarter's planning inputs recorded after a judgment was made, as
+ * far as they concern this WorkPackage: every team-wide change (census, holidays,
+ * reserve, any assignment — competing ones included, whether or not totals still fit)
+ * plus changes scoped to this package (its own estimate). Non-empty means the judgment
+ * needs reassessment. Because the log only grows, reverting a change never empties it —
+ * only a fresh judgment does.
  */
-export function reassessmentReasons(snapshot: JudgmentContext | null, current: JudgmentContext): string[] {
-  if (snapshot === null) return ['judgment predates context capture'];
-  const reasons: string[] = [];
-  const differs = (a: number, b: number) => Math.abs(a - b) > MATERIAL_CHANGE_EW;
-  if (differs(snapshot.estimateEw, current.estimateEw)) reasons.push(`estimate changed ${fmt(snapshot.estimateEw)} → ${fmt(current.estimateEw)} ew`);
-  if (differs(snapshot.assignedEw, current.assignedEw)) reasons.push(`assignment changed ${fmt(snapshot.assignedEw)} → ${fmt(current.assignedEw)} ew`);
-  if (differs(snapshot.netDeliveryEw, current.netDeliveryEw)) {
-    reasons.push(`team net delivery capacity changed ${fmt(snapshot.netDeliveryEw)} → ${fmt(current.netDeliveryEw)} ew`);
+export function changesSinceJudgment(
+  changes: PlanChange[],
+  workPackageId: number,
+  judgment: Pick<FeasibilityJudgment, 'planChangeId'>,
+): PlanChange[] {
+  if (judgment.planChangeId === null) {
+    return [{ id: 0, workPackageId: null, changedAt: '', description: 'judgment predates change tracking' }];
   }
-  if (differs(snapshot.reserveEw, current.reserveEw)) reasons.push(`Unplanned Work reserve changed ${fmt(snapshot.reserveEw)} → ${fmt(current.reserveEw)} ew`);
-  if (current.shortfallEw > snapshot.shortfallEw + MATERIAL_CHANGE_EW) {
-    reasons.push(`team shortfall grew ${fmt(snapshot.shortfallEw)} → ${fmt(current.shortfallEw)} ew (competing assignments)`);
-  }
-  return reasons;
+  const since = judgment.planChangeId;
+  return changes.filter((c) => c.id > since && (c.workPackageId === null || c.workPackageId === workPackageId));
 }
 
 /**
@@ -164,34 +183,42 @@ export const STATE_LABELS: Record<PlanningState, string> = {
 
 export interface StateAssessment {
   state: PlanningState;
-  /** A judgment exists but the context it was made in has materially changed. */
+  /** A judgment exists but planning inputs changed after it was made. */
   needsReassessment: boolean;
-  /** What changed, for the planner. Empty when current. */
+  /** The changes recorded since the judgment, for the planner. Empty when current. */
   reassessmentReasons: string[];
   /** The recorded judgment, current or stale. */
   judgment: FeasibilityJudgment | null;
 }
 
-export function assessState(wp: WorkPackagePlan, rec: Reconciliation): StateAssessment {
-  const current = judgmentContext(wp, rec);
-  const reasons = wp.judgment ? reassessmentReasons(wp.judgment.context, current) : [];
-  const stale = reasons.length > 0;
+/**
+ * `changes` is the team-quarter's change log (any order). Feasibility requires a feasible
+ * judgment with no changes logged since it, whose prerequisites still hold.
+ */
+export function assessState(wp: WorkPackagePlan, rec: Reconciliation, changes: PlanChange[]): StateAssessment {
+  const since = wp.judgment ? changesSinceJudgment(changes, wp.id, wp.judgment) : [];
+  const stale = since.length > 0;
   const currentlyFeasible =
     wp.judgment?.verdict === 'feasible' &&
     !stale &&
-    feasibilityPrerequisiteViolations(current, 'feasible', wp.judgment.scopeNote).length === 0;
+    feasibilityPrerequisiteViolations(judgmentContext(wp, rec), 'feasible', wp.judgment.scopeNote).length === 0;
 
   let state: PlanningState;
   if (currentlyFeasible) state = 'feasible';
   else if (wp.assignedEw <= 0) state = 'accepted';
   else if (wp.assignedEw < wp.estimateEw) state = 'partially_assigned';
   else state = 'assigned';
-  return { state, needsReassessment: stale, reassessmentReasons: reasons, judgment: wp.judgment };
+  return {
+    state,
+    needsReassessment: stale,
+    reassessmentReasons: [...since].sort((a, b) => a.id - b.id).map((c) => c.description),
+    judgment: wp.judgment,
+  };
 }
 
-export function stateCounts(wps: WorkPackagePlan[], rec: Reconciliation): Record<PlanningState, number> {
+export function stateCounts(wps: WorkPackagePlan[], rec: Reconciliation, changes: PlanChange[]): Record<PlanningState, number> {
   const counts: Record<PlanningState, number> = { accepted: 0, partially_assigned: 0, assigned: 0, feasible: 0 };
-  for (const wp of wps) counts[assessState(wp, rec).state] += 1;
+  for (const wp of wps) counts[assessState(wp, rec, changes).state] += 1;
   return counts;
 }
 

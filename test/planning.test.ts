@@ -2,30 +2,33 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assessState,
+  changesSinceJudgment,
   feasibilityPrerequisiteViolations,
   investmentMix,
   judgmentContext,
-  reassessmentReasons,
   reconcile,
   stateCounts,
   type FeasibilityJudgment,
   type JudgmentContext,
+  type PlanChange,
   type WorkPackagePlan,
 } from '../src/domain/planning.js';
 import { close } from './helpers.js';
 
 const T1 = '2027-01-11T09:00:00.000Z';
+const NO_CHANGES: PlanChange[] = [];
 
 function wp(over: Partial<WorkPackagePlan> & { name: string }): WorkPackagePlan {
   return { id: 1, category: 'New Development', estimateEw: 10, assignedEw: 0, judgment: null, ...over };
 }
 
-/** A judgment recorded in exactly the given context (i.e. current unless the plan moves). */
+/** A judgment recorded at change-log position `planChangeId` in the given context. */
 function judged(
   base: Partial<WorkPackagePlan> & { name: string },
   rec: { netDeliveryEw: number; reserveEw: number; shortfallEw: number },
   verdict: FeasibilityJudgment['verdict'] = 'feasible',
   scopeNote = '',
+  planChangeId = 0,
 ): WorkPackagePlan {
   const w = wp(base);
   const context: JudgmentContext = {
@@ -35,8 +38,15 @@ function judged(
     reserveEw: rec.reserveEw,
     shortfallEw: rec.shortfallEw,
   };
-  return { ...w, judgment: { verdict, judgedBy: 'Lead', judgedAt: T1, assumptions: 'estimate holds', scopeNote, context } };
+  return { ...w, judgment: { verdict, judgedBy: 'Lead', judgedAt: T1, assumptions: 'estimate holds', scopeNote, context, planChangeId } };
 }
+
+const change = (id: number, description: string, workPackageId: number | null = null): PlanChange => ({
+  id,
+  workPackageId,
+  changedAt: T1,
+  description,
+});
 
 const balanced = reconcile(61.0, [20, 10, 10, 8], 9.0); // headroom 4.0
 
@@ -73,27 +83,27 @@ describe('reconciliation identity (X3, X6)', () => {
 
 describe('planning states (X2, D10)', () => {
   it('X2: 8 of 14 assigned is partially assigned, and does not imply coverage', () => {
-    assert.equal(assessState(wp({ name: 'Telemetry', estimateEw: 14, assignedEw: 8 }), balanced).state, 'partially_assigned');
+    assert.equal(assessState(wp({ name: 'Telemetry', estimateEw: 14, assignedEw: 8 }), balanced, NO_CHANGES).state, 'partially_assigned');
   });
 
   it('accepted with no assignment is accepted; assignment ≥ estimate is assigned', () => {
-    assert.equal(assessState(wp({ name: 'a', assignedEw: 0 }), balanced).state, 'accepted');
-    assert.equal(assessState(wp({ name: 'b', estimateEw: 10, assignedEw: 10 }), balanced).state, 'assigned');
-    assert.equal(assessState(wp({ name: 'c', estimateEw: 10, assignedEw: 12 }), balanced).state, 'assigned');
+    assert.equal(assessState(wp({ name: 'a', assignedEw: 0 }), balanced, NO_CHANGES).state, 'accepted');
+    assert.equal(assessState(wp({ name: 'b', estimateEw: 10, assignedEw: 10 }), balanced, NO_CHANGES).state, 'assigned');
+    assert.equal(assessState(wp({ name: 'c', estimateEw: 10, assignedEw: 12 }), balanced, NO_CHANGES).state, 'assigned');
   });
 
   it('a positive balance never marks work feasible — only a recorded judgment does', () => {
-    assert.equal(assessState(wp({ name: 'full', estimateEw: 10, assignedEw: 10 }), balanced).state, 'assigned');
-    assert.equal(assessState(judged({ name: 'full', estimateEw: 10, assignedEw: 10 }, balanced), balanced).state, 'feasible');
+    assert.equal(assessState(wp({ name: 'full', estimateEw: 10, assignedEw: 10 }), balanced, NO_CHANGES).state, 'assigned');
+    assert.equal(assessState(judged({ name: 'full', estimateEw: 10, assignedEw: 10 }, balanced), balanced, NO_CHANGES).state, 'feasible');
   });
 
   it('a partially assigned package can be judged feasible with reduced scope', () => {
     const w = judged({ name: 'Telemetry', estimateEw: 14, assignedEw: 8 }, balanced, 'feasible', 'ingestion phase only');
-    assert.equal(assessState(w, balanced).state, 'feasible');
+    assert.equal(assessState(w, balanced, NO_CHANGES).state, 'feasible');
   });
 
   it('a "not feasible" judgment leaves the package in its assignment-derived state', () => {
-    const a = assessState(judged({ name: 'x', estimateEw: 10, assignedEw: 10 }, balanced, 'not_feasible'), balanced);
+    const a = assessState(judged({ name: 'x', estimateEw: 10, assignedEw: 10 }, balanced, 'not_feasible'), balanced, NO_CHANGES);
     assert.equal(a.state, 'assigned');
     assert.equal(a.needsReassessment, false);
   });
@@ -105,7 +115,7 @@ describe('planning states (X2, D10)', () => {
       wp({ id: 3, name: 'c', estimateEw: 10, assignedEw: 10 }),
       judged({ id: 4, name: 'd', estimateEw: 10, assignedEw: 10 }, balanced),
     ];
-    const counts = stateCounts(list, balanced);
+    const counts = stateCounts(list, balanced, NO_CHANGES);
     assert.deepEqual(counts, { accepted: 1, partially_assigned: 1, assigned: 1, feasible: 1 });
     assert.equal(Object.values(counts).reduce((a, b) => a + b, 0), list.length);
   });
@@ -148,7 +158,7 @@ describe('feasibility prerequisites (D15)', () => {
 
   it('meeting every prerequisite yields no violations, and still does not make work feasible by itself', () => {
     assert.deepEqual(feasibilityPrerequisiteViolations(ctx({}), 'feasible', ''), []);
-    assert.equal(assessState(wp({ name: 'x', estimateEw: 10, assignedEw: 10 }), balanced).state, 'assigned');
+    assert.equal(assessState(wp({ name: 'x', estimateEw: 10, assignedEw: 10 }), balanced, NO_CHANGES).state, 'assigned');
   });
 
   it('a negative verdict is always recordable', () => {
@@ -156,55 +166,64 @@ describe('feasibility prerequisites (D15)', () => {
   });
 });
 
-describe('team-quarter reassessment rule (D15)', () => {
-  const snapshot: JudgmentContext = { estimateEw: 20, assignedEw: 20, netDeliveryEw: 61, reserveEw: 9, shortfallEw: 0 };
-  const same = (over: Partial<JudgmentContext>): JudgmentContext => ({ ...snapshot, ...over });
+describe('team-quarter reassessment rule (D15) — durable change log', () => {
+  const judgment = { planChangeId: 3 };
 
-  it('nothing material changed → no reassessment (no-op edits are safe)', () => {
-    assert.deepEqual(reassessmentReasons(snapshot, same({})), []);
-    assert.deepEqual(reassessmentReasons(snapshot, same({ netDeliveryEw: 61.000000001 })), [], 'float noise is not a change');
+  it('no changes logged since the judgment → current', () => {
+    const log = [change(1, 'person added: Chen'), change(2, 'assignment to "A" changed 0.0 → 20.0 ew'), change(3, 'reserve changed 0.0 → 9.0 ew')];
+    assert.deepEqual(changesSinceJudgment(log, 1, judgment), []);
   });
 
-  it('estimate or own assignment change → reassessment', () => {
-    assert.match(reassessmentReasons(snapshot, same({ estimateEw: 24 }))[0]!, /estimate changed 20\.0 → 24\.0/);
-    assert.match(reassessmentReasons(snapshot, same({ assignedEw: 15 }))[0]!, /assignment changed 20\.0 → 15\.0/);
-  });
-
-  it('team capacity change → reassessment, including capacity dropping to zero', () => {
-    assert.match(reassessmentReasons(snapshot, same({ netDeliveryEw: 40 }))[0]!, /net delivery capacity changed 61\.0 → 40\.0/);
-    const gone = reassessmentReasons(snapshot, same({ netDeliveryEw: 0, shortfallEw: 57 }));
-    assert.ok(gone.some((r) => /61\.0 → 0\.0/.test(r)));
-    assert.ok(gone.some((r) => /shortfall grew/.test(r)));
-  });
-
-  it('reserve change → reassessment; re-saving the same reserve → none', () => {
-    assert.match(reassessmentReasons(snapshot, same({ reserveEw: 6 }))[0]!, /reserve changed 9\.0 → 6\.0/);
-    assert.deepEqual(reassessmentReasons(snapshot, same({ reserveEw: 9 })), []);
-  });
-
-  it('competing assignments matter only when they create or worsen a team shortfall', () => {
-    // Other work claims free headroom: headroom shrinks but no shortfall → not material.
-    assert.deepEqual(reassessmentReasons(snapshot, same({ shortfallEw: 0 })), []);
-    // Other work claims capacity the team does not have → material.
-    assert.match(reassessmentReasons(snapshot, same({ shortfallEw: 3 }))[0]!, /shortfall grew 0\.0 → 3\.0/);
-    // A shortfall that shrinks is not a reason to reassess a feasible judgment.
-    assert.deepEqual(reassessmentReasons({ ...snapshot, shortfallEw: 3 }, same({ shortfallEw: 1 })), []);
-  });
-
-  it('a judgment with no captured context is always stale', () => {
-    assert.deepEqual(reassessmentReasons(null, snapshot), ['judgment predates context capture']);
-  });
-
-  it('a stale feasible judgment is flagged and no longer counts as feasible', () => {
-    const w = judged({ name: 'x', estimateEw: 20, assignedEw: 20 }, balanced);
-    const shrunk = reconcile(40.0, [20, 10, 10, 8], 9.0); // capacity dropped: shortfall 17
-    const a = assessState(w, shrunk);
+  it('any team-wide change logged after the judgment → needs reassessment, in log order', () => {
+    const log = [change(3, 'older'), change(5, 'absence added for Chen: 2027-03-15 → 2027-03-19'), change(4, 'person added: Sam (100%)')];
+    const since = changesSinceJudgment(log, 1, judgment);
+    assert.deepEqual(
+      since.map((c) => c.id),
+      [5, 4],
+    );
+    const a = assessState(judged({ name: 'x', estimateEw: 20, assignedEw: 20 }, balanced, 'feasible', '', 3), balanced, log);
     assert.equal(a.needsReassessment, true);
     assert.equal(a.state, 'assigned');
-    assert.ok(a.reassessmentReasons.length >= 2);
+    assert.deepEqual(a.reassessmentReasons, ['person added: Sam (100%)', 'absence added for Chen: 2027-03-15 → 2027-03-19']);
   });
 
-  it('judgmentContext captures the current plan for a package', () => {
+  it('a competing assignment is material even when totals still fit (conservative rule)', () => {
+    const log = [change(4, 'assignment to "Search" changed 0.0 → 3.0 ew')];
+    assert.equal(assessState(judged({ name: 'x', estimateEw: 20, assignedEw: 20 }, balanced, 'feasible', '', 3), balanced, log).needsReassessment, true);
+  });
+
+  it('another package’s own estimate change is not material to this package', () => {
+    const log = [change(4, 'estimate for "Other" changed 6.0 → 9.0 ew', 99)];
+    assert.deepEqual(changesSinceJudgment(log, 1, judgment), []);
+    assert.equal(changesSinceJudgment(log, 99, judgment).length, 1);
+  });
+
+  it('once flagged, a judgment stays flagged: the log only grows, so a revert is another change', () => {
+    const log = [change(4, 'Unplanned Work reserve changed 9.0 → 6.0 ew'), change(5, 'Unplanned Work reserve changed 6.0 → 9.0 ew')];
+    const a = assessState(judged({ name: 'x', estimateEw: 20, assignedEw: 20 }, balanced, 'feasible', '', 3), balanced, log);
+    assert.equal(a.needsReassessment, true, 'totals match the judgment context again, but the judgment is not revived');
+    assert.equal(a.reassessmentReasons.length, 2);
+  });
+
+  it('a fresh judgment at the current log position is current, and only that clears the flag', () => {
+    const log = [change(4, 'x'), change(5, 'y')];
+    assert.equal(assessState(judged({ name: 'x', estimateEw: 20, assignedEw: 20 }, balanced, 'feasible', '', 5), balanced, log).needsReassessment, false);
+  });
+
+  it('a judgment recorded before change tracking is always stale', () => {
+    const since = changesSinceJudgment([], 1, { planChangeId: null });
+    assert.equal(since.length, 1);
+    assert.match(since[0]!.description, /predates change tracking/);
+  });
+
+  it('a stale feasible judgment never counts as feasible, and prerequisites are re-checked for a current one', () => {
+    // Current judgment, but the team is now overallocated: prerequisites fail → not feasible.
+    const short = reconcile(40.0, [20, 10, 10, 8], 9.0);
+    const a = assessState(judged({ name: 'x', estimateEw: 20, assignedEw: 20 }, short, 'feasible', '', 0), short, NO_CHANGES);
+    assert.equal(a.state, 'assigned');
+  });
+
+  it('judgmentContext captures the current figures for the record', () => {
     const c = judgmentContext(wp({ name: 'x', estimateEw: 14, assignedEw: 8 }), balanced);
     assert.deepEqual(c, { estimateEw: 14, assignedEw: 8, netDeliveryEw: 61, reserveEw: 9, shortfallEw: 0 });
   });

@@ -107,24 +107,29 @@ These are necessary conditions, never sufficient ones: meeting all of them makes
 
 ### The team-quarter reassessment rule (D15)
 
-Every judgment is stored with the **context** it was made in: the package's estimate and
-assignment, the team's net delivery capacity, the Unplanned Work reserve, and the
-team-quarter shortfall. A judgment stays current while that context is unchanged and needs
-reassessment — and stops counting as feasible — when any of these has materially changed:
+Each team-quarter keeps a **durable, append-only change log** of material changes to its
+planning inputs. A judgment records the log position it was made at (and, for the record,
+the figures at the time). It needs reassessment — and stops counting as feasible — as soon
+as any later entry concerns it, and **stays that way until a fresh technical-lead judgment
+is recorded**. The log only grows: reverting a change is itself a change, and a later change
+that happens to restore the totals (an equal-capacity replacement for an absent specialist,
+say) does not revive a judgment whose assumptions it may have broken.
 
-| Change | Effect |
+| Change | Logged as |
 |---|---|
-| The package's estimate or assignment | needs reassessment |
-| The team's net delivery capacity (census, schedule, absence, holiday, overhead) | needs reassessment |
-| The Unplanned Work reserve | needs reassessment |
-| Competing assignments that **create or worsen a team shortfall** | needs reassessment |
-| Competing assignments that only consume free headroom | no effect |
-| An edit re-saving the same value, or an edit later undone | no effect |
+| A person added or removed; a schedule change added or removed; an absence added or removed; a holiday added or removed; a person's overhead changed | team-wide change, for each quarter the dates touch |
+| The Unplanned Work reserve changed | team-wide change |
+| **Any** assignment changed, or assigned work removed — competing assignments included, whether or not totals still fit | team-wide change (the conservative rule) |
+| A package's own estimate changed | change scoped to that package |
+| Work accepted onto the list without an assignment; a holiday renamed | not logged (no capacity input changed) |
+| A save that re-enters the same value (assignment, estimate, reserve, overhead) | not logged — a genuinely unchanged save is a no-op |
 
-"Materially" means beyond 0.005 engineer-weeks — smaller than anything a planner can
-enter, so float noise never counts and a genuine edit always does. Reassessment replaces
-nothing: the new judgment is appended and the history is kept. A judgment recorded without
-a captured context is treated as needing reassessment.
+"Material" means beyond 0.005 engineer-weeks — smaller than anything a planner can enter,
+so float noise never counts and a genuine edit always does. The log is not skill matching
+and does not know *why* a change matters; it records that the inputs a lead judged against
+have moved, and leaves the judgment to the lead. Reassessment replaces nothing: the new
+judgment is appended and the history kept. A judgment recorded before change tracking
+existed is treated as needing reassessment.
 
 ## Commitment
 

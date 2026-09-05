@@ -137,9 +137,10 @@ Judged deliverable by the responsible technical lead given estimates, specialist
 constraints, dependencies and sequencing.
 
 ### Feasibility judgment
-The recorded lead judgment, its material assumptions, and the team-quarter context it was
-made in. A feasible verdict must meet the capacity prerequisites; any judgment needs
-reassessment when its context materially changes. History is kept.
+The recorded lead judgment, its material assumptions, and the change-log position it was
+made at. A feasible verdict must meet the capacity prerequisites; any judgment needs
+reassessment once a later change to the team-quarter's planning inputs concerns it, and
+stays so until a fresh judgment is recorded. History is kept.
 
 ### Commitment
 The recorded promise that a WorkPackage (or a stated part of one) will be delivered in the

@@ -55,7 +55,7 @@ Requires Node 22.13 or later (the database uses the built-in `node:sqlite`).
 npm install        # three dev dependencies; no runtime dependencies
 npm run seed       # loads a clearly-labelled synthetic team and quarter
 npm start          # http://127.0.0.1:3000/
-npm test           # 78 checks, including the worked examples in docs/domain
+npm test           # 81 checks, including the worked examples in docs/domain
 ```
 
 The plan is saved to `data/planning.db` and survives restarts. The synthetic example

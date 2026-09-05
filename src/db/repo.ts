@@ -1,6 +1,11 @@
 /**
  * Persistence for the one-team, one-quarter planning workflow. Plain SQL over node:sqlite;
  * every write is a small, validated statement so the plan survives across sessions.
+ *
+ * Every mutation that materially changes a team-quarter's planning inputs appends a row to
+ * the durable `plan_change` log (D15). Judgments record the log position they were made
+ * at; later rows mean they need reassessment, until a fresh judgment is recorded. A save
+ * that changes nothing appends nothing.
  */
 
 import { assertISODate, HolidayCalendar, type ISODate } from '../domain/calendar.js';
@@ -14,9 +19,11 @@ import {
 } from '../domain/capacity.js';
 import {
   type Category,
+  differsMaterially,
   type FeasibilityJudgment,
   isCategory,
   type JudgmentContext,
+  type PlanChange,
   type Verdict,
   type WorkPackagePlan,
 } from '../domain/planning.js';
@@ -53,6 +60,7 @@ export interface WorkPackageRecord extends WorkPackagePlan {
 }
 
 const now = () => new Date().toISOString();
+const fmt = (n: number) => n.toFixed(1);
 
 function requireText(value: string | undefined, label: string): string {
   const v = (value ?? '').trim();
@@ -69,6 +77,43 @@ function requireNumber(value: string | number | undefined, label: string): numbe
 function optionalDate(value: string | undefined, label: string): ISODate | null {
   const v = (value ?? '').trim();
   return v ? assertISODate(v, label) : null;
+}
+
+// ---- the change log ----------------------------------------------------------------------------
+
+function logChange(db: Database, teamId: number, quarterId: number, description: string, workPackageId: number | null = null): void {
+  db.prepare('INSERT INTO plan_change (team_id, quarter_id, work_package_id, changed_at, description) VALUES (?, ?, ?, ?, ?)').run(
+    teamId,
+    quarterId,
+    workPackageId,
+    now(),
+    description,
+  );
+}
+
+/** Quarters whose date range intersects [from, to] (null bounds are open). */
+function quartersIntersecting(db: Database, from: ISODate | null, to: ISODate | null): QuarterRow[] {
+  return listQuarters(db).filter((q) => (from === null || from <= q.end) && (to === null || to >= q.start));
+}
+
+function logForQuarters(db: Database, teamId: number, quarters: QuarterRow[], description: string): void {
+  for (const q of quarters) logChange(db, teamId, q.id, description);
+}
+
+export function listChanges(db: Database, teamId: number, quarterId: number): PlanChange[] {
+  return (
+    db
+      .prepare('SELECT id, work_package_id, changed_at, description FROM plan_change WHERE team_id = ? AND quarter_id = ? ORDER BY id')
+      .all(teamId, quarterId) as unknown as Array<{ id: number; work_package_id: number | null; changed_at: string; description: string }>
+  ).map((c) => ({ id: c.id, workPackageId: c.work_package_id, changedAt: c.changed_at, description: c.description }));
+}
+
+/** The latest change id recorded for a team-quarter, or 0 when none has been. */
+export function latestChangeId(db: Database, teamId: number, quarterId: number): number {
+  const row = db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM plan_change WHERE team_id = ? AND quarter_id = ?').get(teamId, quarterId) as {
+    id: number;
+  };
+  return row.id;
 }
 
 // ---- quarters, teams, holidays -------------------------------------------------------------
@@ -107,13 +152,26 @@ export function getTeam(db: Database, id: number): TeamRow | undefined {
   return db.prepare('SELECT id, name FROM team WHERE id = ?').get(id) as TeamRow | undefined;
 }
 
+/** A holiday affects every team in every quarter that contains the date. */
+function logHolidayChange(db: Database, date: ISODate, description: string): void {
+  const quarters = quartersIntersecting(db, date, date);
+  for (const t of listTeams(db)) logForQuarters(db, t.id, quarters, description);
+}
+
 export function addHoliday(db: Database, input: { date: string; name: string }): void {
   const date = assertISODate(input.date.trim(), 'Holiday date');
-  db.prepare('INSERT OR REPLACE INTO holiday (date, name) VALUES (?, ?)').run(date, requireText(input.name, 'Holiday name'));
+  const name = requireText(input.name, 'Holiday name');
+  const existing = db.prepare('SELECT name FROM holiday WHERE date = ?').get(date) as { name: string } | undefined;
+  db.prepare('INSERT OR REPLACE INTO holiday (date, name) VALUES (?, ?)').run(date, name);
+  if (!existing) logHolidayChange(db, date, `holiday added: ${date} (${name})`);
+  // Renaming an existing holiday changes no capacity, so it is not logged.
 }
 
 export function deleteHoliday(db: Database, date: string): void {
+  const existing = db.prepare('SELECT name FROM holiday WHERE date = ?').get(date) as { name: string } | undefined;
+  if (!existing) return;
   db.prepare('DELETE FROM holiday WHERE date = ?').run(date);
+  logHolidayChange(db, date, `holiday removed: ${date} (${existing.name})`);
 }
 
 export function listHolidays(db: Database): HolidayRow[] {
@@ -125,6 +183,24 @@ export function holidayCalendar(db: Database): HolidayCalendar {
 }
 
 // ---- census ----------------------------------------------------------------------------------
+
+interface PersonRow {
+  id: number;
+  team_id: number;
+  name: string;
+  joined_on: string | null;
+  left_on: string | null;
+}
+
+export function getPerson(db: Database, personId: number): PersonRow | undefined {
+  return db.prepare('SELECT id, team_id, name, joined_on, left_on FROM person WHERE id = ?').get(personId) as PersonRow | undefined;
+}
+
+function requirePerson(db: Database, personId: number): PersonRow {
+  const p = getPerson(db, personId);
+  if (!p) throw new Error('Person not found');
+  return p;
+}
 
 export function addPerson(
   db: Database,
@@ -140,14 +216,19 @@ export function addPerson(
   const r = db.prepare('INSERT INTO person (team_id, name, joined_on, left_on) VALUES (?, ?, ?, ?)').run(input.teamId, name, joined, left);
   const id = Number(r.lastInsertRowid);
   db.prepare('INSERT INTO schedule (person_id, fraction, effective_from) VALUES (?, ?, NULL)').run(id, schedule.fraction);
+  logForQuarters(db, input.teamId, quartersIntersecting(db, joined, left), `person added: ${name} (${(schedule.fraction * 100).toFixed(0)}%)`);
   return id;
 }
 
 export function deletePerson(db: Database, personId: number): void {
+  const p = getPerson(db, personId);
+  if (!p) return;
   db.prepare('DELETE FROM person WHERE id = ?').run(personId);
+  logForQuarters(db, p.team_id, quartersIntersecting(db, p.joined_on, p.left_on), `person removed: ${p.name}`);
 }
 
 export function addScheduleChange(db: Database, input: { personId: number; fraction: string | number; effectiveFrom: string }): void {
+  const p = requirePerson(db, input.personId);
   const schedule: SchedulePeriod = {
     fraction: requireNumber(input.fraction, 'Schedule fraction'),
     effectiveFrom: assertISODate(input.effectiveFrom.trim(), 'Effective from'),
@@ -158,15 +239,32 @@ export function addScheduleChange(db: Database, input: { personId: number; fract
     schedule.fraction,
     schedule.effectiveFrom,
   );
+  logForQuarters(
+    db,
+    p.team_id,
+    quartersIntersecting(db, schedule.effectiveFrom, p.left_on),
+    `schedule change for ${p.name}: ${(schedule.fraction * 100).toFixed(0)}% from ${schedule.effectiveFrom}`,
+  );
 }
 
 export function deleteSchedule(db: Database, scheduleId: number): void {
-  const row = db.prepare('SELECT effective_from FROM schedule WHERE id = ?').get(scheduleId) as { effective_from: string | null } | undefined;
-  if (row && row.effective_from === null) throw new Error('The initial schedule cannot be deleted; delete the person instead');
+  const row = db.prepare('SELECT person_id, fraction, effective_from FROM schedule WHERE id = ?').get(scheduleId) as
+    | { person_id: number; fraction: number; effective_from: string | null }
+    | undefined;
+  if (!row) return;
+  if (row.effective_from === null) throw new Error('The initial schedule cannot be deleted; delete the person instead');
+  const p = requirePerson(db, row.person_id);
   db.prepare('DELETE FROM schedule WHERE id = ?').run(scheduleId);
+  logForQuarters(
+    db,
+    p.team_id,
+    quartersIntersecting(db, row.effective_from, p.left_on),
+    `schedule change removed for ${p.name}: ${(row.fraction * 100).toFixed(0)}% from ${row.effective_from}`,
+  );
 }
 
 export function addAbsence(db: Database, input: { personId: number; from: string; to: string; note?: string }): void {
+  const p = requirePerson(db, input.personId);
   const from = assertISODate(input.from.trim(), 'Absence start');
   const to = assertISODate(input.to.trim(), 'Absence end');
   if (to < from) throw new Error('Absence end must not precede its start');
@@ -176,27 +274,33 @@ export function addAbsence(db: Database, input: { personId: number; from: string
     to,
     (input.note ?? '').trim(),
   );
+  logForQuarters(db, p.team_id, quartersIntersecting(db, from, to), `absence added for ${p.name}: ${from} → ${to}`);
 }
 
 export function deleteAbsence(db: Database, absenceId: number): void {
+  const row = db.prepare('SELECT person_id, from_date, to_date FROM absence WHERE id = ?').get(absenceId) as
+    | { person_id: number; from_date: string; to_date: string }
+    | undefined;
+  if (!row) return;
+  const p = requirePerson(db, row.person_id);
   db.prepare('DELETE FROM absence WHERE id = ?').run(absenceId);
+  logForQuarters(db, p.team_id, quartersIntersecting(db, row.from_date, row.to_date), `absence removed for ${p.name}: ${row.from_date} → ${row.to_date}`);
 }
 
 export function setOverhead(db: Database, input: { personId: number; quarterId: number; percent: string | number; note?: string }): void {
+  const p = requirePerson(db, input.personId);
   const percent = requireNumber(input.percent, 'Overhead percent');
   validateOverheadPercent(percent);
+  const note = (input.note ?? '').trim();
+  const before = db.prepare('SELECT percent FROM overhead WHERE person_id = ? AND quarter_id = ?').get(input.personId, input.quarterId) as
+    | { percent: number }
+    | undefined;
   db.prepare(
     `INSERT INTO overhead (person_id, quarter_id, percent, note) VALUES (?, ?, ?, ?)
      ON CONFLICT (person_id, quarter_id) DO UPDATE SET percent = excluded.percent, note = excluded.note`,
-  ).run(input.personId, input.quarterId, percent, (input.note ?? '').trim());
-}
-
-interface PersonRow {
-  id: number;
-  team_id: number;
-  name: string;
-  joined_on: string | null;
-  left_on: string | null;
+  ).run(input.personId, input.quarterId, percent, note);
+  const previous = before?.percent ?? 0;
+  if (previous !== percent) logChange(db, p.team_id, input.quarterId, `overhead for ${p.name} changed ${previous}% → ${percent}%`);
 }
 
 export function listPeople(db: Database, teamId: number, quarterId: number): PersonRecord[] {
@@ -231,11 +335,25 @@ export function listPeople(db: Database, teamId: number, quarterId: number): Per
   });
 }
 
-export function getPerson(db: Database, personId: number): PersonRow | undefined {
-  return db.prepare('SELECT id, team_id, name, joined_on, left_on FROM person WHERE id = ?').get(personId) as PersonRow | undefined;
+// ---- work list, assignments, reserve, feasibility ----------------------------------------------
+
+interface WorkPackageRef {
+  id: number;
+  team_id: number;
+  quarter_id: number;
+  name: string;
+  estimate_ew: number;
 }
 
-// ---- work list, assignments, reserve, feasibility ----------------------------------------------
+export function getWorkPackage(db: Database, id: number): WorkPackageRef | undefined {
+  return db.prepare('SELECT id, team_id, quarter_id, name, estimate_ew FROM work_package WHERE id = ?').get(id) as WorkPackageRef | undefined;
+}
+
+function requireWorkPackage(db: Database, id: number): WorkPackageRef {
+  const wp = getWorkPackage(db, id);
+  if (!wp) throw new Error('WorkPackage not found');
+  return wp;
+}
 
 export function addWorkPackage(
   db: Database,
@@ -248,23 +366,43 @@ export function addWorkPackage(
   const r = db
     .prepare('INSERT INTO work_package (team_id, quarter_id, name, category, estimate_ew, notes, changed_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(input.teamId, input.quarterId, name, input.category, estimate, (input.notes ?? '').trim(), now());
+  // Accepting work claims no capacity, so nothing is logged until it is assigned.
   return Number(r.lastInsertRowid);
 }
 
 export function updateEstimate(db: Database, workPackageId: number, estimateEw: string | number): void {
+  const wp = requireWorkPackage(db, workPackageId);
   const estimate = requireNumber(estimateEw, 'Estimate');
   if (estimate < 0) throw new Error('Estimate cannot be negative');
+  if (!differsMaterially(wp.estimate_ew, estimate)) return;
   db.prepare('UPDATE work_package SET estimate_ew = ?, changed_at = ? WHERE id = ?').run(estimate, now(), workPackageId);
+  // An estimate concerns this package's own judgment only, so the change is scoped to it.
+  logChange(db, wp.team_id, wp.quarter_id, `estimate for "${wp.name}" changed ${fmt(wp.estimate_ew)} → ${fmt(estimate)} ew`, wp.id);
 }
 
 export function deleteWorkPackage(db: Database, workPackageId: number): void {
+  const wp = getWorkPackage(db, workPackageId);
+  if (!wp) return;
+  const assigned = getAssignment(db, workPackageId, wp.team_id);
   db.prepare('DELETE FROM work_package WHERE id = ?').run(workPackageId);
+  // Removing assigned work frees capacity for everyone else: a team-wide change.
+  if (assigned > 0) logChange(db, wp.team_id, wp.quarter_id, `WorkPackage "${wp.name}" removed (had ${fmt(assigned)} ew assigned)`);
+}
+
+export function getAssignment(db: Database, workPackageId: number, teamId: number): number {
+  const row = db.prepare('SELECT engineer_weeks FROM assignment WHERE work_package_id = ? AND team_id = ?').get(workPackageId, teamId) as
+    | { engineer_weeks: number }
+    | undefined;
+  return row?.engineer_weeks ?? 0;
 }
 
 /** Earmark a quantity of a team's capacity to a WorkPackage; zero removes the assignment. */
 export function setAssignment(db: Database, input: { workPackageId: number; teamId: number; engineerWeeks: string | number }): void {
+  const wp = requireWorkPackage(db, input.workPackageId);
   const ew = requireNumber(input.engineerWeeks, 'Assigned engineer-weeks');
   if (ew < 0) throw new Error('Assigned engineer-weeks cannot be negative');
+  const before = getAssignment(db, input.workPackageId, input.teamId);
+  if (!differsMaterially(before, ew)) return;
   if (ew === 0) {
     db.prepare('DELETE FROM assignment WHERE work_package_id = ? AND team_id = ?').run(input.workPackageId, input.teamId);
   } else {
@@ -274,15 +412,21 @@ export function setAssignment(db: Database, input: { workPackageId: number; team
     ).run(input.workPackageId, input.teamId, ew);
   }
   db.prepare('UPDATE work_package SET changed_at = ? WHERE id = ?').run(now(), input.workPackageId);
+  // Any assignment is a claim on the shared team-quarter capacity, so every judgment in
+  // the team-quarter — not just this package's — is affected (the conservative rule).
+  logChange(db, wp.team_id, wp.quarter_id, `assignment to "${wp.name}" changed ${fmt(before)} → ${fmt(ew)} ew`);
 }
 
 export function setReserve(db: Database, input: { teamId: number; quarterId: number; engineerWeeks: string | number }): void {
   const ew = requireNumber(input.engineerWeeks, 'Unplanned Work reserve');
   if (ew < 0) throw new Error('Unplanned Work reserve cannot be negative');
+  const before = getReserve(db, input.teamId, input.quarterId);
+  if (!differsMaterially(before, ew)) return;
   db.prepare(
     `INSERT INTO reserve (team_id, quarter_id, engineer_weeks) VALUES (?, ?, ?)
      ON CONFLICT (team_id, quarter_id) DO UPDATE SET engineer_weeks = excluded.engineer_weeks`,
   ).run(input.teamId, input.quarterId, ew);
+  logChange(db, input.teamId, input.quarterId, `Unplanned Work reserve changed ${fmt(before)} → ${fmt(ew)} ew`);
 }
 
 export function getReserve(db: Database, teamId: number, quarterId: number): number {
@@ -297,8 +441,8 @@ export function isVerdict(value: string): value is Verdict {
 }
 
 /**
- * Stores a judgment together with the context it was made in. Callers are expected to go
- * through `recordJudgment` in `plan.ts`, which computes the context and enforces the
+ * Stores a judgment together with the figures and the change-log position it was made at.
+ * Callers are expected to go through `recordJudgment` in `plan.ts`, which enforces the
  * prerequisites; this function only persists.
  */
 export function insertFeasibility(
@@ -311,12 +455,13 @@ export function insertFeasibility(
     scopeNote?: string;
     judgedAt?: string;
     context: JudgmentContext;
+    planChangeId: number;
   },
 ): void {
   db.prepare(
     `INSERT INTO feasibility (work_package_id, verdict, judged_by, judged_at, assumptions, scope_note,
-                              ctx_estimate_ew, ctx_assigned_ew, ctx_net_delivery_ew, ctx_reserve_ew, ctx_shortfall_ew)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                              ctx_estimate_ew, ctx_assigned_ew, ctx_net_delivery_ew, ctx_reserve_ew, ctx_shortfall_ew, plan_change_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.workPackageId,
     input.verdict,
@@ -329,6 +474,7 @@ export function insertFeasibility(
     input.context.netDeliveryEw,
     input.context.reserveEw,
     input.context.shortfallEw,
+    input.planChangeId,
   );
 }
 
@@ -357,7 +503,7 @@ export function listWorkPackages(db: Database, teamId: number, quarterId: number
     .all(teamId, quarterId) as unknown as WorkPackageRow[];
   const judgments = db.prepare(
     `SELECT verdict, judged_by, judged_at, assumptions, scope_note,
-            ctx_estimate_ew, ctx_assigned_ew, ctx_net_delivery_ew, ctx_reserve_ew, ctx_shortfall_ew
+            ctx_estimate_ew, ctx_assigned_ew, ctx_net_delivery_ew, ctx_reserve_ew, ctx_shortfall_ew, plan_change_id
        FROM feasibility WHERE work_package_id = ? ORDER BY judged_at DESC, id DESC`,
   );
   return rows.map((r) => {
@@ -389,6 +535,7 @@ interface FeasibilityRow {
   ctx_net_delivery_ew: number | null;
   ctx_reserve_ew: number | null;
   ctx_shortfall_ew: number | null;
+  plan_change_id: number | null;
 }
 
 function toJudgment(j: FeasibilityRow): FeasibilityJudgment {
@@ -406,11 +553,13 @@ function toJudgment(j: FeasibilityRow): FeasibilityJudgment {
           reserveEw: j.ctx_reserve_ew,
           shortfallEw: j.ctx_shortfall_ew,
         };
-  return { verdict: j.verdict, judgedBy: j.judged_by, judgedAt: j.judged_at, assumptions: j.assumptions, scopeNote: j.scope_note, context };
-}
-
-export function getWorkPackage(db: Database, id: number): { id: number; team_id: number; quarter_id: number } | undefined {
-  return db.prepare('SELECT id, team_id, quarter_id FROM work_package WHERE id = ?').get(id) as
-    | { id: number; team_id: number; quarter_id: number }
-    | undefined;
+  return {
+    verdict: j.verdict,
+    judgedBy: j.judged_by,
+    judgedAt: j.judged_at,
+    assumptions: j.assumptions,
+    scopeNote: j.scope_note,
+    context,
+    planChangeId: j.plan_change_id,
+  };
 }

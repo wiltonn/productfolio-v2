@@ -14,6 +14,8 @@ import {
   holidayCalendar,
   insertFeasibility,
   isVerdict,
+  latestChangeId,
+  listChanges,
   listHolidays,
   listPeople,
   listWorkPackages,
@@ -33,6 +35,7 @@ import {
   reconcile,
   stateCounts,
   type InvestmentMix,
+  type PlanChange,
   type PlanningState,
   type Reconciliation,
   type StateAssessment,
@@ -54,6 +57,8 @@ export interface TeamQuarterPlan {
   reconciliation: Reconciliation;
   mix: InvestmentMix;
   stateCounts: Record<PlanningState, number>;
+  /** The team-quarter's durable change log, oldest first. */
+  changes: PlanChange[];
 }
 
 export function loadPlan(db: Database, teamId: number, quarterId: number): TeamQuarterPlan | undefined {
@@ -72,6 +77,7 @@ export function loadPlan(db: Database, teamId: number, quarterId: number): TeamQ
     wps.map((w) => w.assignedEw),
     reserve,
   );
+  const changes = listChanges(db, teamId, quarterId);
 
   return {
     team,
@@ -81,10 +87,11 @@ export function loadPlan(db: Database, teamId: number, quarterId: number): TeamQ
     holidayCalendarSize: holidays.size,
     people,
     capacity,
-    workPackages: wps.map((w) => ({ ...w, assessment: assessState(w, reconciliation) })),
+    workPackages: wps.map((w) => ({ ...w, assessment: assessState(w, reconciliation, changes) })),
     reconciliation,
     mix: investmentMix(wps, reconciliation),
-    stateCounts: stateCounts(wps, reconciliation),
+    stateCounts: stateCounts(wps, reconciliation, changes),
+    changes,
   };
 }
 
@@ -121,5 +128,6 @@ export function recordJudgment(
     scopeNote,
     ...(input.judgedAt !== undefined ? { judgedAt: input.judgedAt } : {}),
     context,
+    planChangeId: latestChangeId(db, ref.team_id, ref.quarter_id),
   });
 }

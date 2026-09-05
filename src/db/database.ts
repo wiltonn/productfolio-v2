@@ -90,8 +90,21 @@ CREATE TABLE IF NOT EXISTS feasibility (
   ctx_assigned_ew REAL,
   ctx_net_delivery_ew REAL,
   ctx_reserve_ew REAL,
-  ctx_shortfall_ew REAL
+  ctx_shortfall_ew REAL,
+  plan_change_id INTEGER
 );
+
+-- Append-only log of material changes to a team-quarter's planning inputs. A judgment
+-- records the latest id at the time it is made; later rows mean it needs reassessment.
+CREATE TABLE IF NOT EXISTS plan_change (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL REFERENCES team(id),
+  quarter_id INTEGER NOT NULL REFERENCES quarter(id),
+  work_package_id INTEGER,
+  changed_at TEXT NOT NULL,
+  description TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS plan_change_team_quarter ON plan_change (team_id, quarter_id, id);
 `;
 
 /** Columns added after the first schema; existing databases gain them on open. */
@@ -101,6 +114,7 @@ const ADDED_COLUMNS: Array<{ table: string; column: string; definition: string }
   { table: 'feasibility', column: 'ctx_net_delivery_ew', definition: 'REAL' },
   { table: 'feasibility', column: 'ctx_reserve_ew', definition: 'REAL' },
   { table: 'feasibility', column: 'ctx_shortfall_ew', definition: 'REAL' },
+  { table: 'feasibility', column: 'plan_change_id', definition: 'INTEGER' },
 ];
 
 function migrate(db: DatabaseSync): void {

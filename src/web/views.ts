@@ -152,7 +152,7 @@ function stateBadge(wp: WorkPackageView): string {
   const base = `<span class="badge ${state}">${e(STATE_LABELS[state])}</span>`;
   if (!needsReassessment) return base;
   const why = reassessmentReasons.map((r) => `<li>${e(r)}</li>`).join('');
-  return `${base}<br><span class="badge stale">judgment needs reassessment</span><ul class="muted reasons">${why}</ul>`;
+  return `${base}<br><span class="badge stale">judgment needs reassessment</span><div class="muted">changes since it was recorded:</div><ul class="muted reasons">${why}</ul>`;
 }
 
 export function planPage(plan: TeamQuarterPlan, opts: { synthetic?: boolean } = {}): string {
@@ -300,9 +300,10 @@ Days in force = Mon–Fri days between the person's joined/left dates within the
 <p>${stateSummary}</p>
 <p class="muted">States are non-overlapping. <strong>Feasible</strong> requires a recorded technical-lead judgment; the arithmetic never confers it.
 A feasible verdict is refused unless capacity is assigned, the team-quarter has no shortfall, and — when assigned capacity is below the estimate — the reduced scope is stated.
-A judgment is flagged for reassessment, and stops counting as feasible, when the context it was made in changes materially: this package's estimate or assignment,
-the team's net delivery capacity, the Unplanned Work reserve, or a team shortfall created or worsened by competing assignments. Re-saving the same values does not flag it.
-Judgment history is kept.</p>
+A judgment is flagged for reassessment, and stops counting as feasible, when any planning input of this team-quarter changes after it was made: people, schedules,
+absences, holidays, overhead, the Unplanned Work reserve, any assignment (competing ones included, even when totals still fit), or this package's own estimate.
+The flag persists until a fresh judgment is recorded — reverting the change, or a later change that happens to restore the totals, does not clear it.
+Re-saving an unchanged value records no change. Judgment history is kept.</p>
 <table>
 <tr><th>WorkPackage</th><th>Category</th><th class="num">Estimate (this team, ew)</th><th class="num">Assigned (ew)</th><th>State</th><th>Feasibility judgment</th></tr>
 ${wpRows || '<tr><td colspan="6" class="muted">No work accepted yet.</td></tr>'}
