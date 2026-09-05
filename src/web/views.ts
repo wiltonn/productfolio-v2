@@ -1,10 +1,14 @@
 /**
- * Server-rendered HTML. No client-side framework: an Engineering leader fills in a handful
- * of numbers per quarter, and plain forms are the clearest way to do that.
+ * Server-rendered HTML. No client-side framework: every page is assembled from the shared
+ * vocabulary in `ui.ts`, and the browser's only job is to post a form and put the server's
+ * answer back on the page.
  *
  * Three Engineering-wide views — Census, Capacity, Allocations — are the primary workspace;
  * no team needs to be opened to reach them. The team-quarter page remains available as
- * optional detail, and every edit form carries the team it affects.
+ * optional detail, and every edit names the team-quarter it applies to.
+ *
+ * Anything a background save can change is wrapped in a named region (see `ui.ts` and
+ * `regions.ts`), so the server can re-render just that part.
  */
 
 import { CATEGORIES, STATE_LABELS, type PlanningState } from '../domain/planning.js';
@@ -13,723 +17,1267 @@ import type { PersonCapacity } from '../domain/capacity.js';
 import type { EngineeringQuarter, EngineeringTotals } from '../engineering.js';
 import { shareOfNetDelivery } from '../engineering.js';
 import type { TeamQuarterPlan, WorkPackageView } from '../plan.js';
+import {
+  callout,
+  card,
+  chain,
+  dialog,
+  dialogWell,
+  emptyRow,
+  emptyState,
+  escapeHtml,
+  ew,
+  field,
+  layout,
+  numericCell,
+  pageHead,
+  pct,
+  pill,
+  plural,
+  region,
+  rowMenu,
+  table,
+  viewHref,
+  type MenuItem,
+  type Tone,
+  type ViewContext,
+} from './ui.js';
 
-export function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+export { escapeHtml, ew, pct, viewHref, layout, errorPage, type Tab, type ViewContext } from './ui.js';
 
 const e = escapeHtml;
 
-/** Engineer-weeks, always one decimal so 61 and 61.0 read the same. */
-export const ew = (n: number): string => (Math.abs(n) < 0.05 ? '0.0' : n.toFixed(1));
-export const pct = (n: number | null): string => (n === null ? '—' : `${n.toFixed(1)}%`);
+const STATE_TONE: Record<PlanningState, Tone> = {
+  accepted: 'neutral',
+  partially_assigned: 'warn',
+  assigned: 'info',
+  feasible: 'good',
+};
 
-const STYLE = `
-  :root { color-scheme: light; }
-  body { font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; background: #f6f7f9; color: #1c1e21; }
-  header { background: #1f3a5f; color: #fff; padding: 0.7rem 1.5rem; }
-  header .brand { font-weight: 700; margin-right: 1rem; }
-  header nav { display: inline-flex; gap: 0.4rem; flex-wrap: wrap; }
-  header nav a { color: #cfe0f5; text-decoration: none; padding: 0.25rem 0.7rem; border-radius: 4px; }
-  header nav a.active { background: #fff; color: #1f3a5f; font-weight: 600; }
-  main { max-width: 1240px; margin: 0 auto; padding: 1rem 1.5rem 4rem; }
-  h1 { font-size: 1.5rem; margin: 0.8rem 0 0.2rem; }
-  h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; border-bottom: 2px solid #d5d9e0; padding-bottom: 0.25rem; }
-  h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
-  section.card { background: #fff; border: 1px solid #d5d9e0; border-radius: 6px; padding: 1rem 1.2rem; margin: 0.8rem 0; }
-  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
-  th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #e3e6eb; vertical-align: top; }
-  th { background: #eef1f5; font-weight: 600; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tr.group td { background: #f0f3f8; font-weight: 600; }
-  tr.total td, tr.total th { background: #eef1f5; font-weight: 700; }
-  form.inline { display: inline-flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; margin: 0.15rem 0; }
-  form.block { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.5rem 0.8rem; align-items: end; margin: 0.5rem 0; }
-  form.block label, form.inline label { display: flex; flex-direction: column; font-size: 0.85rem; color: #444; }
-  form.block label.wide { grid-column: 1 / -1; }
-  form.bar { display: flex; gap: 0.6rem; align-items: end; flex-wrap: wrap; }
-  input, select, textarea { font: inherit; padding: 0.3rem 0.4rem; border: 1px solid #b8bec8; border-radius: 4px; }
-  input[type=number] { width: 5.5rem; }
-  input[type=date] { width: 10rem; }
-  button { font: inherit; padding: 0.35rem 0.8rem; border: 1px solid #1f3a5f; background: #1f3a5f; color: #fff; border-radius: 4px; cursor: pointer; }
-  button.quiet { background: #fff; color: #1f3a5f; }
-  button.danger { background: #fff; color: #9b1c1c; border-color: #9b1c1c; padding: 0.15rem 0.5rem; font-size: 0.85rem; }
-  .muted { color: #5f6673; font-size: 0.9rem; }
-  .error { background: #fdecea; border: 1px solid #e5a3a3; padding: 0.6rem 0.9rem; border-radius: 4px; }
-  .warn { background: #fdecea; border: 1px solid #e5a3a3; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.5rem 0; }
-  .ok { color: #1a6b2f; font-weight: 600; }
-  .shortfall { color: #9b1c1c; font-weight: 700; }
-  .chain { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.6rem; }
-  .chain div { background: #eef1f5; border-radius: 6px; padding: 0.6rem 0.8rem; }
-  .chain .label { font-size: 0.8rem; color: #5f6673; }
-  .chain .value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
-  .badge.accepted { background: #e8eaee; color: #3c4350; }
-  .badge.partially_assigned { background: #fff1d6; color: #7a4d00; }
-  .badge.assigned { background: #dfe9f7; color: #1f3a5f; }
-  .badge.feasible { background: #d9f0e0; color: #1a6b2f; }
-  .badge.stale { background: #fdecea; color: #9b1c1c; }
-  .badge.team { background: #e8eaee; color: #3c4350; font-weight: 500; }
-  details summary { cursor: pointer; color: #1f3a5f; }
-  ul.reasons { margin: 0.2rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; }
-  .synthetic { background: #e8f0fe; border: 1px solid #a9c2ec; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.9rem; }
-`;
+const SYNTHETIC_NOTE = callout({
+  tone: 'example',
+  icon: '◆',
+  title: 'Synthetic example data',
+  body: `<p>Names and figures are invented for illustration and reproduce the worked examples in the domain documentation.</p>`,
+});
 
-export type Tab = 'census' | 'capacity' | 'allocations' | 'setup' | 'team';
+const isSynthetic = (names: string[]): boolean => names.some((n) => /synthetic/i.test(n));
 
-/** The Engineering-wide views share one quarter selection, carried in the query string. */
-export interface ViewContext {
-  quarterId: number | null;
-  teamId: number | null;
+function holidayCallout(plan: TeamQuarterPlan | undefined, ctx: ViewContext): string {
+  if (!plan || plan.holidayCalendarSize > 0) return '';
+  return callout({
+    tone: 'warn',
+    icon: '◐',
+    title: 'The holiday calendar is empty',
+    body: `<p>Capacity for this quarter is being calculated as if no day is a public holiday.
+      <a href="${e(viewHref('/setup', ctx))}">Add holidays in Setup</a> if that is not right.</p>`,
+  });
 }
 
-export function viewHref(path: string, ctx: ViewContext, over: Partial<ViewContext> = {}): string {
-  const merged = { ...ctx, ...over };
-  const params: string[] = [];
-  if (merged.quarterId !== null) params.push(`q=${merged.quarterId}`);
-  if (merged.teamId !== null) params.push(`team=${merged.teamId}`);
-  return params.length ? `${path}?${params.join('&')}` : path;
-}
+const quarterMeta = (q: QuarterRow, plan?: TeamQuarterPlan): string =>
+  `${e(q.name)} · <b>${e(q.start)}</b> → <b>${e(q.end)}</b>${
+    plan ? ` · <b>${plan.workingDaysInQuarter}</b> working days (Mon–Fri) · <b>${plan.holidaysInQuarter.length}</b> ${
+      plan.holidaysInQuarter.length === 1 ? 'holiday' : 'holidays'
+    }` : ''
+  } · all figures in engineer-weeks (ew), where 1 ew = 5 working days at a full-time schedule`;
 
-function nav(active: Tab, ctx: ViewContext): string {
-  const item = (tab: Tab, path: string, label: string) =>
-    `<a href="${e(viewHref(path, ctx))}"${active === tab ? ' class="active"' : ''}>${e(label)}</a>`;
-  return `<nav>${item('census', '/census', 'Census')}${item('capacity', '/capacity', 'Capacity')}${item(
-    'allocations',
-    '/allocations',
-    'Allocations',
-  )}${item('setup', '/setup', 'Setup')}</nav>`;
-}
+// ---- census fragments ---------------------------------------------------------------------
 
-export function layout(title: string, body: string, active: Tab = 'setup', ctx: ViewContext = { quarterId: null, teamId: null }): string {
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${e(title)} — ProductFolio</title><style>${STYLE}</style></head>
-<body><header><span class="brand">ProductFolio</span> ${nav(active, ctx)}</header>
-<main>${body}</main></body></html>`;
-}
-
-export function errorPage(message: string, backHref: string): string {
-  return layout(
-    'Could not save',
-    `<h1>Could not save</h1><p class="error">${e(message)}</p><p><a href="${e(backHref)}">Go back</a></p>`,
-  );
-}
-
-// ---- shared controls ---------------------------------------------------------------------------
-
-function quarterSelector(path: string, quarters: QuarterRow[], ctx: ViewContext, label = 'Quarter'): string {
-  if (!quarters.length) return `<p class="muted">No quarters defined yet — add one under <a href="/setup">Setup</a>.</p>`;
-  const teamField = ctx.teamId !== null ? `<input type="hidden" name="team" value="${ctx.teamId}">` : '';
-  return `<form class="bar" method="get" action="${e(path)}">
-  <label>${e(label)} <select name="q">${quarters
-    .map((q) => `<option value="${q.id}"${q.id === ctx.quarterId ? ' selected' : ''}>${e(q.name)}</option>`)
-    .join('')}</select></label>${teamField}
-  <button class="quiet">Show</button>
-</form>`;
-}
-
-function teamFilter(path: string, teams: TeamRow[], ctx: ViewContext): string {
-  if (teams.length < 2) return '';
-  const quarterField = ctx.quarterId !== null ? `<input type="hidden" name="q" value="${ctx.quarterId}">` : '';
-  return `<form class="bar" method="get" action="${e(path)}">
-  <label>Team <select name="team"><option value="">All teams</option>${teams
-    .map((t) => `<option value="${t.id}"${t.id === ctx.teamId ? ' selected' : ''}>${e(t.name)}</option>`)
-    .join('')}</select></label>${quarterField}
-  <button class="quiet">Filter</button>
-  ${ctx.teamId !== null ? `<a href="${e(viewHref(path, ctx, { teamId: null }))}">Clear filter</a>` : ''}
-</form>`;
-}
-
-function teamSelect(name: string, teams: TeamRow[], selected: number | null = null): string {
-  return `<select name="${e(name)}" required>${teams
-    .map((t) => `<option value="${t.id}"${t.id === selected ? ' selected' : ''}>${e(t.name)}</option>`)
-    .join('')}</select>`;
-}
-
-const syntheticNote = (names: string[]): string =>
-  names.some((n) => /synthetic/i.test(n))
-    ? `<p class="synthetic">Includes synthetic example data. Names and figures are invented for illustration and match the worked examples in <code>docs/domain/DOMAIN_EXAMPLES.md</code>.</p>`
-    : '';
-
-// ---- shared fragments --------------------------------------------------------------------------
-
-/** Person row cells shared by the census and the team page. `back` returns here after an edit. */
-function personCells(p: PersonRecord, cap: PersonCapacity, quarterId: number, back: string, teamName?: string): string {
-  const schedules = p.scheduleRows
+const scheduleText = (p: PersonRecord): string =>
+  p.scheduleRows
     .slice()
     .sort((a, b) => ((a.effectiveFrom ?? '') < (b.effectiveFrom ?? '') ? -1 : 1))
     .map(
       (s) =>
-        `${(s.fraction * 100).toFixed(0)}% ${s.effectiveFrom ? `from ${e(s.effectiveFrom)}` : '(initial)'}${
-          s.effectiveFrom
-            ? ` <form class="inline" method="post" action="/schedules/${s.id}/delete"><input type="hidden" name="back" value="${e(back)}"><button class="danger">×</button></form>`
-            : ''
-        }`,
+        `${(s.fraction * 100).toFixed(0)}%<span class="sub2">${
+          s.effectiveFrom ? `from ${e(s.effectiveFrom)}` : 'since the start'
+        }</span>`,
     )
-    .join('<br>');
-  const absences = p.absenceRows.length
-    ? p.absenceRows
-        .map(
-          (a) =>
-            `${e(a.from)} → ${e(a.to)}${a.note ? ` <span class="muted">(${e(a.note)})</span>` : ''}
-             <form class="inline" method="post" action="/absences/${a.id}/delete"><input type="hidden" name="back" value="${e(back)}"><button class="danger">×</button></form>`,
-        )
-        .join('<br>')
-    : '<span class="muted">none</span>';
+    .join('');
 
-  return `<td><strong>${e(p.name)}</strong>${teamName ? `<br><span class="badge team">${e(teamName)}</span>` : ''}
-    <br><span class="muted">${p.joined ? `joined ${e(p.joined)}` : 'in force at start'}${p.left ? `, left ${e(p.left)}` : ''}</span>
-    <form class="inline" method="post" action="/people/${p.id}/delete"><input type="hidden" name="back" value="${e(back)}"><button class="danger">Remove person</button></form></td>
-  <td>${schedules}
-    <details><summary>Change schedule</summary>
-    <form class="inline" method="post" action="/people/${p.id}/schedules"><input type="hidden" name="back" value="${e(back)}">
-      <label>Fraction <input type="number" name="fraction" step="0.05" min="0.05" max="1" required placeholder="0.6"></label>
-      <label>Effective from <input type="date" name="effective_from" required></label>
-      <button class="quiet">Add</button></form></details></td>
-  <td>${absences}
-    <details><summary>Add absence</summary>
-    <form class="inline" method="post" action="/people/${p.id}/absences"><input type="hidden" name="back" value="${e(back)}">
-      <label>From <input type="date" name="from" required></label>
-      <label>To <input type="date" name="to" required></label>
-      <label>Note <input name="note" placeholder="leave"></label>
-      <button class="quiet">Add</button></form></details></td>
+const absenceText = (p: PersonRecord): string =>
+  p.absenceRows.length
+    ? p.absenceRows
+        .map((a) => `${e(a.from)} → ${e(a.to)}${a.note ? `<span class="sub2">${e(a.note)}</span>` : ''}`)
+        .join('<br>')
+    : '<span class="footnote">None recorded</span>';
+
+const inForceText = (p: PersonRecord): string =>
+  `${p.joined ? `joined ${e(p.joined)}` : 'in force at the start'}${p.left ? ` · left ${e(p.left)}` : ''}`;
+
+function personMenu(p: PersonRecord): string {
+  const items: MenuItem[] = [
+    { label: 'Change working schedule…', dialog: `dlg-schedule-${p.id}` },
+    { label: 'Add absence…', dialog: `dlg-absence-${p.id}` },
+  ];
+  for (const s of p.scheduleRows.filter((x) => x.effectiveFrom !== null)) {
+    items.push({ label: `Remove schedule change from ${s.effectiveFrom}…`, dialog: `dlg-rm-schedule-${s.id}`, danger: true });
+  }
+  for (const a of p.absenceRows) {
+    items.push({ label: `Remove absence ${a.from} → ${a.to}…`, dialog: `dlg-rm-absence-${a.id}`, danger: true });
+  }
+  items.push({ label: `Remove ${p.name} from Engineering…`, dialog: `dlg-rm-person-${p.id}`, danger: true, separated: true });
+  return rowMenu({ key: `person-${p.id}`, label: p.name, items });
+}
+
+function personRow(p: PersonRecord, cap: PersonCapacity, plan: TeamQuarterPlan, back: string): string {
+  const overhead = numericCell({
+    field: `overhead:${p.id}`,
+    label: `overhead for ${p.name}`,
+    action: `/people/${p.id}/overhead`,
+    name: 'percent',
+    value: p.overheadPercent,
+    display: `${p.overheadPercent}%`,
+    unit: '%',
+    step: '1',
+    min: '0',
+    max: '100',
+    spoken: 'percent, a share of their available capacity',
+    hidden: { back, quarter_id: plan.quarter.id },
+    ...(p.overheadPercent > 0 || p.overheadNote
+      ? { hint: `${ew(cap.overheadEw)} ew${p.overheadNote ? ` · ${e(p.overheadNote)}` : ''}` }
+      : {}),
+  });
+
+  return `<tr>
+  <td><span class="name">${e(p.name)}</span><span class="sub2">${inForceText(p)}</span></td>
+  <td>${scheduleText(p)}</td>
+  <td>${absenceText(p)}</td>
   <td class="num">${cap.workingDaysInForce}</td>
   <td class="num">${ew(cap.contractedEw)}</td>
-  <td class="num">${ew(cap.absenceEw)}<br><span class="muted">${cap.absenceDays} days</span></td>
+  <td class="num">${ew(cap.absenceEw)}${cap.absenceDays ? `<span class="sub2">${plural(cap.absenceDays, 'day')}</span>` : ''}</td>
   <td class="num">${ew(cap.availableEw)}</td>
-  <td class="num">${ew(cap.overheadEw)}<br>
-    <form class="inline" method="post" action="/people/${p.id}/overhead"><input type="hidden" name="back" value="${e(back)}"><input type="hidden" name="quarter_id" value="${quarterId}">
-      <input type="number" name="percent" step="1" min="0" max="100" value="${p.overheadPercent}" title="Overhead as % of this person's available capacity">%
-      <button class="quiet">Set</button></form>${p.overheadNote ? `<span class="muted">${e(p.overheadNote)}</span>` : ''}</td>
-  <td class="num"><strong>${ew(cap.netDeliveryEw)}</strong></td>`;
-}
-
-const PERSON_HEADER = `<tr><th>Person</th><th>Working schedule</th><th>Known absences (leave)</th><th class="num">Days in force</th>
-<th class="num">Contracted</th><th class="num">Absence</th><th class="num">Available</th><th class="num">Overhead</th><th class="num">Net delivery</th></tr>`;
-
-function stateBadge(wp: WorkPackageView): string {
-  const { state, needsReassessment, reassessmentReasons } = wp.assessment;
-  const base = `<span class="badge ${state}">${e(STATE_LABELS[state])}</span>`;
-  if (!needsReassessment) return base;
-  const why = reassessmentReasons.map((r) => `<li>${e(r)}</li>`).join('');
-  return `${base}<br><span class="badge stale">judgment needs reassessment</span><div class="muted">changes since it was recorded:</div><ul class="muted reasons">${why}</ul>`;
-}
-
-/** Work package row shared by the allocations view and the team page. */
-function workPackageRow(wp: WorkPackageView, teamId: number, back: string, teamName?: string): string {
-  const j = wp.judgment;
-  const judgmentHtml = j
-    ? `<div><strong>${j.verdict === 'feasible' ? 'Feasible' : 'Not feasible'}</strong> — ${e(j.judgedBy)}, ${e(j.judgedAt.slice(0, 10))}
-       ${j.scopeNote ? `<br><em>Scope:</em> ${e(j.scopeNote)}` : ''}<br><em>Assumptions:</em> ${e(j.assumptions)}</div>`
-    : '<span class="muted">No judgment recorded.</span>';
-  return `<tr>
-  <td><strong>${e(wp.name)}</strong>${teamName ? `<br><span class="badge team">${e(teamName)}</span>` : ''}
-    ${wp.notes ? `<br><span class="muted">${e(wp.notes)}</span>` : ''}
-    <form class="inline" method="post" action="/work-packages/${wp.id}/delete"><input type="hidden" name="back" value="${e(back)}"><button class="danger">Remove</button></form></td>
-  <td>${e(wp.category)}</td>
-  <td class="num"><form class="inline" method="post" action="/work-packages/${wp.id}/estimate"><input type="hidden" name="back" value="${e(back)}">
-    <input type="number" name="estimate_ew" step="0.1" min="0" value="${wp.estimateEw}"> <button class="quiet">Set</button></form></td>
-  <td class="num"><form class="inline" method="post" action="/work-packages/${wp.id}/assignment"><input type="hidden" name="back" value="${e(back)}"><input type="hidden" name="team_id" value="${teamId}">
-    <input type="number" name="engineer_weeks" step="0.1" min="0" value="${wp.assignedEw}"> <button class="quiet">Set</button></form>
-    <br><span class="muted">${ew(wp.assignedEw)} of ${ew(wp.estimateEw)} estimated</span></td>
-  <td>${stateBadge(wp)}</td>
-  <td>${judgmentHtml}
-    <details><summary>Record feasibility judgment</summary>
-    <form class="block" method="post" action="/work-packages/${wp.id}/feasibility"><input type="hidden" name="back" value="${e(back)}">
-      <label>Verdict <select name="verdict"><option value="feasible">Feasible</option><option value="not_feasible">Not feasible</option></select></label>
-      <label>Judged by (technical lead) <input name="judged_by" required></label>
-      <label class="wide">Material assumptions <textarea name="assumptions" rows="2" required placeholder="What this judgment rests on: estimates held, specialist availability, dependencies, delivery window…"></textarea></label>
-      <label class="wide">Reduced scope this judgment covers (required when assigned &lt; estimate) <input name="scope_note" placeholder="e.g. ingestion phase only"></label>
-      <div><button>Record judgment</button></div>
-    </form></details></td>
+  <td class="num">${overhead}</td>
+  <td class="num strong">${ew(cap.netDeliveryEw)}</td>
+  <td class="mid">${personMenu(p)}</td>
 </tr>`;
 }
 
-const WORK_HEADER = `<tr><th>WorkPackage</th><th>Category</th><th class="num">Estimate (owning team, ew)</th><th class="num">Assigned (ew)</th><th>State</th><th>Feasibility judgment</th></tr>`;
-
-const STATE_RULES = `<p class="muted">States are non-overlapping. <strong>Feasible</strong> requires a recorded technical-lead judgment; the arithmetic never confers it.
-A feasible verdict is refused unless capacity is assigned, the owning team-quarter has no shortfall, and — when assigned capacity is below the estimate — the reduced scope is stated.
-A judgment is flagged for reassessment, and stops counting as feasible, once any planning input of its team-quarter changes, and stays flagged until a fresh judgment is recorded.
-Judgment history is kept.</p>`;
-
-/** The team-quarter reconciliation identity, rendered as one row of a cross-team table. */
-function teamReconciliationRow(plan: TeamQuarterPlan, back: string, ctx: ViewContext): string {
-  const r = plan.reconciliation;
-  return `<tr>
-  <td><a href="${e(viewHref('/allocations', ctx, { teamId: plan.team.id }))}">${e(plan.team.name)}</a>
-    <br><span class="muted"><a href="/plan/${plan.team.id}/${plan.quarter.id}">team detail</a></span></td>
-  <td class="num">${ew(r.netDeliveryEw)}</td>
-  <td class="num">${ew(r.assignedEw)}</td>
-  <td class="num"><form class="inline" method="post" action="/reserve"><input type="hidden" name="back" value="${e(back)}">
-    <input type="hidden" name="team_id" value="${plan.team.id}"><input type="hidden" name="quarter_id" value="${plan.quarter.id}">
-    <input type="number" name="engineer_weeks" step="0.1" min="0" value="${r.reserveEw}"><button class="quiet">Set</button></form></td>
-  <td class="num">${
-    r.shortfallEw > 0
-      ? `<span class="shortfall">SHORTFALL ${ew(r.shortfallEw)}</span>`
-      : `<span class="ok">${ew(r.headroomEw)} headroom</span>`
-  }</td>
+const CENSUS_HEAD = `<tr>
+  <th>Person</th><th>Working schedule</th><th>Known absence</th>
+  <th class="num">Days in force</th><th class="num">Contracted</th><th class="num">Absence</th>
+  <th class="num">Available</th><th class="num">Overhead<span class="sub2">% of available</span></th>
+  <th class="num">Net delivery</th><th><span class="sr-only">Actions</span></th>
 </tr>`;
+
+function censusTeamCard(plan: TeamQuarterPlan, back: string): string {
+  const cap = plan.capacity;
+  const rows = plan.people.length
+    ? plan.people
+        .map((p) => personRow(p, cap.people.find((c) => c.personId === p.id)!, plan, back))
+        .join('') +
+      `<tr class="total">
+        <td>Team total</td><td></td><td></td><td></td>
+        <td class="num">${ew(cap.contractedEw)}</td><td class="num">${ew(cap.absenceEw)}</td>
+        <td class="num">${ew(cap.availableEw)}</td><td class="num">${ew(cap.overheadEw)}</td>
+        <td class="num">${ew(cap.netDeliveryEw)}</td><td></td>
+      </tr>`
+    : emptyRow(10, 'Nobody is on this team yet.');
+
+  return card({
+    title: plan.team.name,
+    sub: `${plural(plan.people.length, 'person', 'people')}${isSynthetic([plan.team.name]) ? ' · synthetic example' : ''}`,
+    raw: table(CENSUS_HEAD, rows, PERSON_COLS),
+  });
 }
 
-/** Engineering totals: quantities summed, headroom and shortfall never netted together. */
-function engineeringTotalsTable(totals: EngineeringTotals): string {
-  return `<table>
-<tr><th>Engineering net delivery capacity</th><th class="num">${ew(totals.netDeliveryEw)} ew</th><td class="muted">sum of the teams' net delivery capacity</td></tr>
-<tr><th>Assigned delivery capacity</th><th class="num">${ew(totals.assignedEw)} ew</th><td class="muted">sum of the teams' assignments</td></tr>
-<tr><th>Unplanned Work reserve</th><th class="num">${ew(totals.reserveEw)} ew</th><td class="muted">sum of the teams' reserves</td></tr>
-<tr><th>Unassigned headroom</th><th class="num"><span class="ok">${ew(totals.surplusHeadroomEw)} ew</span></th>
-  <td class="muted">held by ${totals.teamsWithHeadroom} team${totals.teamsWithHeadroom === 1 ? '' : 's'} — spendable only on that team's own work</td></tr>
-<tr><th>Shortfall</th><th class="num">${
-    totals.shortfallEw > 0 ? `<span class="shortfall">${ew(totals.shortfallEw)} ew</span>` : '<span class="ok">0.0 ew</span>'
-  }</th><td class="muted">${totals.teamsWithShortfall} overallocated team${totals.teamsWithShortfall === 1 ? '' : 's'}</td></tr>
-</table>
-${
-  totals.shortfallEw > 0
-    ? `<p class="warn"><strong>${ew(totals.shortfallEw)} ew of shortfall stands in ${totals.teamsWithShortfall} team${
-        totals.teamsWithShortfall === 1 ? '' : 's'
-      }.</strong> The ${ew(totals.surplusHeadroomEw)} ew of headroom elsewhere does not cover it: capacity belongs to a team and is not interchangeable.
-      Resolve each team's shortfall in its own reconciliation.</p>`
-    : ''
+// ---- census dialogs -----------------------------------------------------------------------
+
+function personDialogs(plan: TeamQuarterPlan, back: string): string[] {
+  const out: string[] = [];
+  const quarterScope = `${plan.team.name} · ${plan.quarter.name}`;
+
+  for (const p of plan.people) {
+    const cap = plan.capacity.people.find((c) => c.personId === p.id)!;
+
+    out.push(
+      dialog({
+        id: `dlg-schedule-${p.id}`,
+        title: `Change ${p.name}'s working schedule`,
+        scope: `${plan.team.name} · applies from the effective date, in every quarter it touches`,
+        action: `/people/${p.id}/schedules`,
+        hidden: { back },
+        label: `working schedule for ${p.name}`,
+        submitLabel: 'Add schedule change',
+        body: `<div class="pair">
+        ${field('Schedule fraction', '<input type="number" name="fraction" step="0.05" min="0.05" max="1" required placeholder="0.6">', '1 = full-time')}
+        ${field('Effective from', '<input type="date" name="effective_from" required>')}
+      </div>
+      <p>The previous schedule stays in force up to this date. Capacity before it is unchanged.</p>`,
+      }),
+    );
+
+    out.push(
+      dialog({
+        id: `dlg-absence-${p.id}`,
+        title: `Add an absence for ${p.name}`,
+        scope: `${plan.team.name} · counted in every quarter the dates fall in`,
+        action: `/people/${p.id}/absences`,
+        hidden: { back },
+        label: `absence for ${p.name}`,
+        submitLabel: 'Add absence',
+        body: `<div class="pair">
+        ${field('From', '<input type="date" name="from" required>')}
+        ${field('To', '<input type="date" name="to" required>')}
+      </div>
+      ${field('Note', '<input type="text" name="note" placeholder="leave">', 'optional')}
+      <p>Absent days are counted at ${e(p.name)}'s scheduled fraction, and a day covered by both a holiday and leave counts once.</p>`,
+      }),
+    );
+
+    for (const s of p.scheduleRows.filter((x) => x.effectiveFrom !== null)) {
+      out.push(
+        dialog({
+          id: `dlg-rm-schedule-${s.id}`,
+          title: 'Remove this schedule change?',
+          scope: `${p.name} · ${plan.team.name}`,
+          action: `/schedules/${s.id}/delete`,
+          hidden: { back },
+          label: `schedule change for ${p.name}`,
+          submitLabel: 'Remove schedule change',
+          destructive: true,
+          body: `<p>This removes the change to <b>${(s.fraction * 100).toFixed(0)}%</b> from
+          <b>${e(s.effectiveFrom ?? '')}</b>. ${e(p.name)} reverts to the schedule in force before it, and capacity
+          is recalculated for every quarter from that date onwards.</p>
+        <p>The change is recorded in the planning change log, so any feasibility judgment for
+          ${e(quarterScope)} will need reassessment. This cannot be undone.</p>`,
+        }),
+      );
+    }
+
+    for (const a of p.absenceRows) {
+      out.push(
+        dialog({
+          id: `dlg-rm-absence-${a.id}`,
+          title: 'Remove this absence?',
+          scope: `${p.name} · ${plan.team.name}`,
+          action: `/absences/${a.id}/delete`,
+          hidden: { back },
+          label: `absence for ${p.name}`,
+          submitLabel: 'Remove absence',
+          destructive: true,
+          body: `<p>This removes <b>${e(a.from)} → ${e(a.to)}</b>${a.note ? ` (${e(a.note)})` : ''} from
+          ${e(p.name)}'s known absence, raising available capacity in every quarter it touches.</p>
+        <p>Any feasibility judgment for ${e(quarterScope)} will need reassessment. This cannot be undone.</p>`,
+        }),
+      );
+    }
+
+    const judgments = plan.workPackages.filter((w) => w.judgment).length;
+    const after = plan.reconciliation.netDeliveryEw - cap.netDeliveryEw;
+    const gap = plan.reconciliation.assignedEw + plan.reconciliation.reserveEw - after;
+    out.push(
+      dialog({
+        id: `dlg-rm-person-${p.id}`,
+        title: `Remove ${p.name} from Engineering?`,
+        scope: `${plan.team.name} · affects every quarter their dates touch`,
+        action: `/people/${p.id}/delete`,
+        hidden: { back },
+        label: p.name,
+        submitLabel: `Remove ${p.name}`,
+        destructive: true,
+        body: `<p>This permanently removes ${e(p.name)} and their working schedule${
+          p.absenceRows.length
+            ? `, along with <b>${plural(p.absenceRows.length, 'recorded absence', 'recorded absences')}</b>`
+            : ''
+        }.</p>
+      <p>${e(quarterScope)} loses <b>${ew(cap.netDeliveryEw)} ew</b> of net delivery capacity, leaving
+        <b>${ew(after)} ew</b>${
+          gap > 0.005
+            ? ` — which puts the team <b>${ew(gap)} ew</b> short of what is already assigned and reserved`
+            : ''
+        }.${
+          judgments > 0
+            ? ` <b>${plural(judgments, 'feasibility judgment')}</b> will need reassessment.`
+            : ''
+        }</p>
+      <p>This cannot be undone.</p>`,
+      }),
+    );
+  }
+  return out;
 }
-<p class="muted">Arithmetic residual across Engineering: ${ew(totals.netHeadroomEw)} ew (headroom − shortfall). This is a bookkeeping figure, not deployable capacity.</p>`;
+
+function addPersonDialog(teams: TeamRow[], ctx: ViewContext, back: string): string {
+  return dialog({
+    id: 'dlg-add-person',
+    title: 'Add a person to Engineering',
+    scope: 'Capacity belongs to the team they join',
+    action: '/people',
+    hidden: { back },
+    label: 'the new person',
+    submitLabel: 'Add person',
+    body: `${field(
+      'Team',
+      `<select name="team_id" required>${teams
+        .map((t) => `<option value="${t.id}"${t.id === ctx.teamId ? ' selected' : ''}>${e(t.name)}</option>`)
+        .join('')}</select>`,
+    )}
+  ${field('Name', '<input type="text" name="name" required>')}
+  <div class="pair">
+    ${field('Schedule fraction', '<input type="number" name="fraction" step="0.05" min="0.05" max="1" value="1" required>', '1 = full-time')}
+    ${field('Joined', '<input type="date" name="joined">', 'blank = before the quarter')}
+  </div>
+  ${field('Left', '<input type="date" name="left">', 'blank = still here')}`,
+  });
 }
 
-// ---- pages -------------------------------------------------------------------------------------
-
-export function setupPage(input: { quarters: QuarterRow[]; teams: TeamRow[]; holidays: HolidayRow[]; ctx: ViewContext }): string {
-  const { quarters, teams, holidays, ctx } = input;
-  const plans =
-    quarters.length && teams.length
-      ? `<table><tr><th>Team</th><th>Quarter</th><th>Dates</th><th></th></tr>${teams
-          .map((t) =>
-            quarters
-              .map(
-                (q) =>
-                  `<tr><td>${e(t.name)}</td><td>${e(q.name)}</td><td>${e(q.start)} → ${e(q.end)}</td>
-                   <td><a href="/plan/${t.id}/${q.id}">Open team detail</a></td></tr>`,
-              )
-              .join(''),
-          )
-          .join('')}</table>`
-      : `<p class="muted">Add a team and a quarter to begin. Or run <code>npm run seed</code> for synthetic examples.</p>`;
-
-  return layout(
-    'Setup',
-    `<h1>Setup</h1>
-<p class="muted">Reference data for the Engineering workspace. Day-to-day planning happens under
-<a href="${e(viewHref('/census', ctx))}">Census</a>, <a href="${e(viewHref('/capacity', ctx))}">Capacity</a> and
-<a href="${e(viewHref('/allocations', ctx))}">Allocations</a>.</p>
-
-<h2>Quarters</h2>
-<section class="card">
-<p class="muted">A quarter is an inclusive date range. Capacity is computed from the Monday–Friday working days inside it.</p>
-<form class="block" method="post" action="/quarters">
-  <label>Name <input name="name" required placeholder="Q1 2027"></label>
-  <label>Start <input type="date" name="start" required></label>
-  <label>End <input type="date" name="end" required></label>
-  <div><button>Add quarter</button></div>
-</form>
-</section>
-
-<h2>Teams</h2>
-<section class="card">
-<p class="muted">A team owns capacity and is the unit a quarterly plan is made for.</p>
-<form class="block" method="post" action="/teams">
-  <label>Name <input name="name" required placeholder="Team name"></label>
-  <div><button>Add team</button></div>
-</form>
-</section>
-
-<h2>Holiday calendar</h2>
-<section class="card">
-<p class="muted">Organization-wide holidays, entered deliberately. The system assumes no jurisdiction and fetches nothing.
-Holidays count as known absence for everyone in force that day; a holiday on a weekend has no effect; a holiday inside
-someone's leave is counted once.</p>
-${
-  holidays.length
-    ? `<table><tr><th>Date</th><th>Name</th><th></th></tr>${holidays
-        .map(
-          (h) =>
-            `<tr><td>${e(h.date)}</td><td>${e(h.name)}</td><td><form class="inline" method="post" action="/holidays/delete">
-             <input type="hidden" name="date" value="${e(h.date)}"><button class="danger">Remove</button></form></td></tr>`,
-        )
-        .join('')}</table>`
-    : `<p class="muted">No holidays entered.</p>`
-}
-<form class="block" method="post" action="/holidays">
-  <label>Date <input type="date" name="date" required></label>
-  <label>Name <input name="name" required placeholder="e.g. Founders' Day"></label>
-  <div><button>Add holiday</button></div>
-</form>
-</section>
-
-<h2>Team-quarter detail</h2>
-<section class="card">
-<p class="muted">Optional. Everything below is also reachable from the Engineering-wide views.</p>
-${plans}
-</section>`,
-    'setup',
-    ctx,
-  );
-}
+// ---- pages: census ------------------------------------------------------------------------
 
 export interface CensusInput {
   quarters: QuarterRow[];
   teams: TeamRow[];
   quarter: QuarterRow | null;
-  /** One entry per team in scope, already filtered. */
-  groups: Array<{ team: TeamRow; people: PersonRecord[]; capacity: PersonCapacity[] }>;
+  /** One plan per team in scope, already filtered. */
+  plans: TeamQuarterPlan[];
   ctx: ViewContext;
 }
 
-export function censusPage(input: CensusInput): string {
-  const { quarters, teams, quarter, groups, ctx } = input;
-  const back = viewHref('/census', ctx);
-  const totalPeople = groups.reduce((n, g) => n + g.people.length, 0);
-
-  const body = groups
-    .map((g) => {
-      const rows = g.people.length
-        ? g.people
-            .map((p) => `<tr>${personCells(p, g.capacity.find((c) => c.personId === p.id)!, quarter!.id, back)}</tr>`)
-            .join('')
-        : `<tr><td colspan="9" class="muted">No people on this team.</td></tr>`;
-      const totals = g.capacity;
-      const sum = (pick: (c: PersonCapacity) => number) => totals.reduce((a, c) => a + pick(c), 0);
-      return `<tr class="group"><td colspan="4">${e(g.team.name)} — ${g.people.length} ${g.people.length === 1 ? 'person' : 'people'}</td>
-        <td class="num">${ew(sum((c) => c.contractedEw))}</td><td class="num">${ew(sum((c) => c.absenceEw))}</td>
-        <td class="num">${ew(sum((c) => c.availableEw))}</td><td class="num">${ew(sum((c) => c.overheadEw))}</td>
-        <td class="num">${ew(sum((c) => c.netDeliveryEw))}</td></tr>${rows}`;
-    })
-    .join('');
-
-  return layout(
-    'Census',
-    `<h1>Engineering census</h1>
-<p class="muted">Everyone in Engineering, grouped by team. ${totalPeople} ${totalPeople === 1 ? 'person' : 'people'} in scope.
-Capacity figures are for the selected quarter; overhead is a percentage of that person's own available capacity.</p>
-${syntheticNote(teams.map((t) => t.name))}
-<section class="card">
-${quarterSelector('/census', quarters, ctx)}
-${teamFilter('/census', teams, ctx)}
-</section>
-${
-  quarter === null
-    ? `<p class="muted">Select a quarter to see capacity figures.</p>`
-    : `<section class="card">
-<table>${PERSON_HEADER}${body || `<tr><td colspan="9" class="muted">No people yet.</td></tr>`}</table>
-<p class="muted">All figures in engineer-weeks for ${e(quarter.name)} (${e(quarter.start)} → ${e(quarter.end)}).
-Days in force = Mon–Fri days between the person's joined/left dates within the quarter that carry a schedule.</p>
-</section>
-
-<h2>Add a person</h2>
-<section class="card">
-<form class="block" method="post" action="/people">
-  <input type="hidden" name="back" value="${e(back)}">
-  <label>Team ${teamSelect('team_id', teams, ctx.teamId)}</label>
-  <label>Name <input name="name" required></label>
-  <label>Schedule fraction (1 = full-time) <input type="number" name="fraction" step="0.05" min="0.05" max="1" value="1" required></label>
-  <label>Joined (blank = before quarter) <input type="date" name="joined"></label>
-  <label>Left (blank = still here) <input type="date" name="left"></label>
-  <div><button>Add person</button></div>
-</form>
-</section>`
-}`,
-    'census',
-    ctx,
-  );
+export function censusTeamsRegion(plans: TeamQuarterPlan[], back: string): string {
+  if (!plans.length) {
+    return card({ raw: emptyState('No teams in scope', 'Add a team under Setup, or clear the team filter.') });
+  }
+  return `<div class="stack">${plans.map((p) => censusTeamCard(p, back)).join('')}</div>`;
 }
 
-export function capacityPage(input: { quarters: QuarterRow[]; teams: TeamRow[]; eng: EngineeringQuarter | null; ctx: ViewContext }): string {
-  const { quarters, teams, eng, ctx } = input;
-  if (!eng) {
-    return layout(
-      'Capacity',
-      `<h1>Engineering capacity</h1>
-<section class="card">${quarterSelector('/capacity', quarters, ctx)}</section>
-<p class="muted">Select a quarter to see the capacity chain.</p>`,
-      'capacity',
+export function censusPage(input: CensusInput): string {
+  const { quarters, teams, quarter, plans, ctx } = input;
+  const back = viewHref('/census', ctx);
+  const people = plans.reduce((n, p) => n + p.people.length, 0);
+
+  const body =
+    quarter === null
+      ? `${pageHead({ title: 'Engineering census' })}
+${card({ raw: emptyState('No quarter selected', 'Capacity figures need a quarter. Add one under <a href="/setup">Setup</a>.') })}`
+      : `${pageHead({
+          title: 'Engineering census',
+          meta: `${quarterMeta(quarter, plans[0])} · overhead is a share of each person's <b>own</b> available capacity`,
+          actions: teams.length ? `<button type="button" class="btn" data-dialog="dlg-add-person">Add person…</button>` : '',
+        })}
+${
+  isSynthetic(teams.map((t) => t.name)) || plans.some((p) => p.holidayCalendarSize === 0)
+    ? `<div class="stack" style="margin-bottom:14px">${holidayCallout(plans[0], ctx)}${
+        isSynthetic(teams.map((t) => t.name)) ? SYNTHETIC_NOTE : ''
+      }</div>`
+    : ''
+}
+${region('census-teams', censusTeamsRegion(plans, back))}
+${card({
+  body: `<p class="footnote"><b>Days in force</b> counts the Mon–Fri days between a person's joined and left dates,
+    inside the quarter, on which a working schedule applies. <b>Contracted</b> is those days at their scheduled
+    fraction. Overhead is netted out of available capacity and reported separately; it is never spread across the
+    delivery investment categories.</p>`,
+})}
+${dialogWell([...(teams.length ? [addPersonDialog(teams, ctx, back)] : []), ...plans.flatMap((p) => personDialogs(p, back))])}`;
+
+  return layout({
+    title: 'Census',
+    active: 'census',
+    ctx,
+    body,
+    contextBar: {
+      path: '/census',
+      quarters,
+      teams,
       ctx,
-    );
-  }
+      trailing: quarter === null ? undefined : `${plural(plans.length, 'team')} · ${plural(people, 'person', 'people')}`,
+    },
+  });
+}
+
+// ---- pages: capacity ----------------------------------------------------------------------
+
+export function capacityChainRegion(t: EngineeringTotals): string {
+  return chain([
+    { label: 'Contracted', value: ew(t.contractedEw), unit: 'ew', den: 'schedules × effective dates' },
+    { op: '−' },
+    { label: 'Known absence', value: ew(t.absenceEw), unit: 'ew', den: 'holidays and leave, counted once per day' },
+    { op: '=' },
+    { label: 'Available', value: ew(t.availableEw), unit: 'ew', den: 'workforce capacity' },
+    { op: '−' },
+    { label: 'Overhead', value: ew(t.overheadEw), unit: 'ew', den: 'management &amp; admin' },
+    { op: '=' },
+    { label: 'Net delivery', value: ew(t.netDeliveryEw), unit: 'ew', tone: 'result', den: 'capacity available to plan with' },
+    {
+      label: 'Overhead ratio',
+      value: pct(t.overheadRatio === null ? null : t.overheadRatio * 100),
+      aside: true,
+      den: `${ew(t.overheadEw)} ÷ ${ew(t.availableEw)} ew available — summed, not the mean of the team ratios`,
+    },
+  ]);
+}
+
+export function capacityTeamsRegion(eng: EngineeringQuarter, ctx: ViewContext): string {
   const t = eng.totals;
   const shown = ctx.teamId === null ? eng.plans : eng.plans.filter((p) => p.team.id === ctx.teamId);
-  const first = eng.plans[0];
-
-  const teamRows = shown
+  const rows = shown
     .map(
       (p) => `<tr>
   <td><a href="${e(viewHref('/capacity', ctx, { teamId: p.team.id }))}">${e(p.team.name)}</a>
-    <br><span class="muted">${p.people.length} ${p.people.length === 1 ? 'person' : 'people'} · <a href="/plan/${p.team.id}/${p.quarter.id}">team detail</a></span></td>
+    <span class="sub2">${plural(p.people.length, 'person', 'people')} · <a href="/plan/${p.team.id}/${p.quarter.id}">team detail</a></span></td>
   <td class="num">${ew(p.capacity.contractedEw)}</td>
   <td class="num">${ew(p.capacity.absenceEw)}</td>
   <td class="num">${ew(p.capacity.availableEw)}</td>
   <td class="num">${ew(p.capacity.overheadEw)}</td>
   <td class="num">${pct(p.capacity.overheadRatio === null ? null : p.capacity.overheadRatio * 100)}</td>
-  <td class="num"><strong>${ew(p.capacity.netDeliveryEw)}</strong></td>
+  <td class="num strong">${ew(p.capacity.netDeliveryEw)}</td>
 </tr>`,
     )
     .join('');
 
-  return layout(
-    'Capacity',
-    `<h1>Engineering capacity — ${e(eng.quarter.name)}</h1>
-<p class="muted">${e(eng.quarter.start)} → ${e(eng.quarter.end)} · ${first ? `${first.workingDaysInQuarter} working days (Mon–Fri) · ` : ''}${
-      first ? `${first.holidaysInQuarter.length} holiday${first.holidaysInQuarter.length === 1 ? '' : 's'} in this quarter · ` : ''
-    }unit: engineer-weeks (ew), where 1 ew = 5 working days at a full-time schedule</p>
-${syntheticNote(teams.map((x) => x.name))}
-<section class="card">
-${quarterSelector('/capacity', quarters, ctx)}
-${teamFilter('/capacity', teams, ctx)}
-</section>
+  const head = `<tr><th>Team</th><th class="num">Contracted</th><th class="num">Absence</th><th class="num">Available</th>
+    <th class="num">Overhead</th><th class="num">Overhead ratio</th><th class="num">Net delivery</th></tr>`;
+  const total = `<tr class="total">
+    <td>Engineering total${ctx.teamId !== null ? ' (all teams)' : ''}</td>
+    <td class="num">${ew(t.contractedEw)}</td><td class="num">${ew(t.absenceEw)}</td><td class="num">${ew(t.availableEw)}</td>
+    <td class="num">${ew(t.overheadEw)}</td><td class="num">${pct(t.overheadRatio === null ? null : t.overheadRatio * 100)}</td>
+    <td class="num">${ew(t.netDeliveryEw)}</td></tr>`;
 
-<h2>Engineering-wide capacity chain</h2>
-<section class="card">
-<div class="chain">
-  <div><div class="label">Contracted capacity</div><div class="value">${ew(t.contractedEw)} ew</div><div class="muted">schedules × effective dates</div></div>
-  <div><div class="label">− Known absences</div><div class="value">${ew(t.absenceEw)} ew</div><div class="muted">holidays ∪ leave, once per day</div></div>
-  <div><div class="label">= Available workforce capacity</div><div class="value">${ew(t.availableEw)} ew</div></div>
-  <div><div class="label">− Overhead</div><div class="value">${ew(t.overheadEw)} ew</div><div class="muted">management &amp; admin, reported separately</div></div>
-  <div><div class="label">= Net delivery capacity</div><div class="value">${ew(t.netDeliveryEw)} ew</div></div>
-  <div><div class="label">Overhead ratio</div><div class="value">${pct(t.overheadRatio === null ? null : t.overheadRatio * 100)}</div>
-    <div class="muted">${ew(t.overheadEw)} ÷ ${ew(t.availableEw)} ew available — summed, not an average of team ratios</div></div>
-</div>
-</section>
-
-<h2>Per-team breakdown</h2>
-<section class="card">
-<table>
-<tr><th>Team</th><th class="num">Contracted</th><th class="num">Absence</th><th class="num">Available</th><th class="num">Overhead</th><th class="num">Overhead ratio</th><th class="num">Net delivery</th></tr>
-${teamRows || '<tr><td colspan="7" class="muted">No teams yet.</td></tr>'}
-<tr class="total"><td>Engineering total${ctx.teamId !== null ? ' (all teams)' : ''}</td><td class="num">${ew(t.contractedEw)}</td><td class="num">${ew(t.absenceEw)}</td>
-  <td class="num">${ew(t.availableEw)}</td><td class="num">${ew(t.overheadEw)}</td>
-  <td class="num">${pct(t.overheadRatio === null ? null : t.overheadRatio * 100)}</td><td class="num">${ew(t.netDeliveryEw)}</td></tr>
-</table>
-<p class="muted">Each team's overhead ratio has that team's available capacity as its denominator; the Engineering ratio has
-Engineering's available capacity (${ew(t.availableEw)} ew). The total is not the mean of the rows above it.
-Edit people, schedules, absences and overhead under <a href="${e(viewHref('/census', ctx))}">Census</a>.</p>
-</section>`,
-    'capacity',
-    ctx,
-  );
+  return table(head, (rows || emptyRow(7, 'No teams yet.')) + total);
 }
 
-export function allocationsPage(input: { quarters: QuarterRow[]; teams: TeamRow[]; eng: EngineeringQuarter | null; ctx: ViewContext }): string {
+export function capacityPage(input: {
+  quarters: QuarterRow[];
+  teams: TeamRow[];
+  eng: EngineeringQuarter | null;
+  ctx: ViewContext;
+}): string {
   const { quarters, teams, eng, ctx } = input;
+  const contextBar = { path: '/capacity', quarters, teams, ctx };
+
   if (!eng) {
-    return layout(
-      'Allocations',
-      `<h1>Engineering allocations</h1>
-<section class="card">${quarterSelector('/allocations', quarters, ctx)}</section>
-<p class="muted">Select a quarter to see the work list.</p>`,
-      'allocations',
+    return layout({
+      title: 'Capacity',
+      active: 'capacity',
       ctx,
-    );
+      contextBar,
+      body: `${pageHead({ title: 'Engineering capacity' })}
+${card({ raw: emptyState('No quarter selected', 'Add a quarter under <a href="/setup">Setup</a> to see the capacity chain.') })}`,
+    });
   }
+
   const t = eng.totals;
-  const back = viewHref('/allocations', ctx);
-  const shown = ctx.teamId === null ? eng.plans : eng.plans.filter((p) => p.team.id === ctx.teamId);
+  const first = eng.plans[0];
+  const people = eng.plans.reduce((n, p) => n + p.people.length, 0);
 
-  const stateSummary = (Object.keys(STATE_LABELS) as PlanningState[])
-    .map((s) => `<span class="badge ${s}">${e(STATE_LABELS[s])}: ${eng.stateCounts[s]}</span>`)
-    .join(' ');
+  return layout({
+    title: 'Capacity',
+    active: 'capacity',
+    ctx,
+    contextBar: { ...contextBar, trailing: `${plural(eng.plans.length, 'team')} · ${plural(people, 'person', 'people')}` },
+    body: `${pageHead({
+      title: 'Engineering capacity',
+      meta: quarterMeta(eng.quarter, first),
+      actions: `<a class="btn ghost" href="${e(viewHref('/census', ctx))}">Edit people in Census</a>`,
+    })}
+${
+  holidayCallout(first, ctx) || isSynthetic(teams.map((x) => x.name))
+    ? `<div class="stack" style="margin-bottom:14px">${holidayCallout(first, ctx)}${
+        isSynthetic(teams.map((x) => x.name)) ? SYNTHETIC_NOTE : ''
+      }</div>`
+    : ''
+}
+${card({
+  title: 'Engineering-wide capacity chain',
+  sub: `Summed across ${plural(eng.plans.length, 'team')}`,
+  body: region('capacity-chain', capacityChainRegion(t)),
+})}
+${card({
+  title: 'Per-team breakdown',
+  sub: 'Capacity belongs to a team and is spendable only there',
+  raw: region('capacity-teams', capacityTeamsRegion(eng, ctx)),
+  foot: `<p class="footnote">Each team's overhead ratio has <b>that team's</b> available capacity as its denominator;
+    the Engineering ratio has Engineering's <b>${ew(t.availableEw)} ew</b>. The total row is summed, never averaged.</p>`,
+})}`,
+  });
+}
 
-  const teamSections = shown
+// ---- allocations fragments ------------------------------------------------------------------
+
+function judgmentHtml(wp: WorkPackageView): string {
+  const j = wp.judgment;
+  if (!j) return '<span class="footnote">No judgment recorded.</span>';
+  const history =
+    wp.judgments.length > 1
+      ? `<details class="history"><summary>${plural(wp.judgments.length - 1, 'earlier judgment')}</summary>
+      <ol>${wp.judgments
+        .slice(1)
+        .map(
+          (h) =>
+            `<li>${h.verdict === 'feasible' ? 'Feasible' : 'Not feasible'} — ${e(h.judgedBy)}, ${e(
+              h.judgedAt.slice(0, 10),
+            )}${h.scopeNote ? ` · scope: ${e(h.scopeNote)}` : ''}</li>`,
+        )
+        .join('')}</ol></details>`
+      : '';
+  return `<div class="judgment">
+  <span class="verdict ${j.verdict === 'feasible' ? 'yes' : 'no'}">${j.verdict === 'feasible' ? 'Feasible' : 'Not feasible'}</span>
+  — ${e(j.judgedBy)}, ${e(j.judgedAt.slice(0, 10))}
+  <dl>
+    ${j.scopeNote ? `<dt>Scope</dt><dd>${e(j.scopeNote)}</dd>` : ''}
+    <dt>Assumptions</dt><dd>${e(j.assumptions)}</dd>
+  </dl>
+  ${history}
+</div>`;
+}
+
+function stateCell(wp: WorkPackageView): string {
+  const { state, needsReassessment, reassessmentReasons } = wp.assessment;
+  const base = pill(STATE_TONE[state], STATE_LABELS[state]);
+  if (!needsReassessment) return base;
+  return `${base}<div style="margin-top:5px">${pill('crit', 'Needs reassessment')}</div>
+  <ul class="reasons">${reassessmentReasons.map((r) => `<li>${e(r)}</li>`).join('')}</ul>`;
+}
+
+function workPackageRow(wp: WorkPackageView, plan: TeamQuarterPlan, back: string): string {
+  const estimate = numericCell({
+    field: `estimate:${wp.id}`,
+    label: `estimate for ${wp.name}`,
+    action: `/work-packages/${wp.id}/estimate`,
+    name: 'estimate_ew',
+    value: wp.estimateEw,
+    display: ew(wp.estimateEw),
+    unit: 'ew',
+    step: '0.1',
+    min: '0',
+    spoken: 'engineer-weeks',
+    hidden: { back },
+  });
+  const assignment = numericCell({
+    field: `assignment:${wp.id}`,
+    label: `${plan.team.name}'s assignment to ${wp.name}`,
+    action: `/work-packages/${wp.id}/assignment`,
+    name: 'engineer_weeks',
+    value: wp.assignedEw,
+    display: ew(wp.assignedEw),
+    unit: 'ew',
+    step: '0.1',
+    min: '0',
+    spoken: 'engineer-weeks',
+    hidden: { back, team_id: plan.team.id },
+    hint: `${ew(wp.assignedEw)} of ${ew(wp.estimateEw)} estimated`,
+  });
+
+  return `<tr>
+  <td><span class="name">${e(wp.name)}</span>${wp.notes ? `<span class="sub2">${e(wp.notes)}</span>` : ''}</td>
+  <td>${e(wp.category)}</td>
+  <td class="num">${estimate}</td>
+  <td class="num">${assignment}</td>
+  <td>${stateCell(wp)}</td>
+  <td>${judgmentHtml(wp)}</td>
+  <td class="mid">${rowMenu({
+    key: `wp-${wp.id}`,
+    label: wp.name,
+    items: [
+      { label: 'Record feasibility judgment…', dialog: `dlg-judge-${wp.id}` },
+      { label: `Remove ${wp.name} from the work list…`, dialog: `dlg-rm-wp-${wp.id}`, danger: true, separated: true },
+    ],
+  })}</td>
+</tr>`;
+}
+
+const WORK_HEAD = `<tr>
+  <th>WorkPackage</th><th>Category</th><th class="num">Estimate (this team, ew)</th><th class="num">Assigned (ew)</th>
+  <th>Planning state</th><th>Feasibility judgment</th><th><span class="sr-only">Actions</span></th>
+</tr>`;
+
+function identityHtml(plan: TeamQuarterPlan): string {
+  const r = plan.reconciliation;
+  return `<span class="identity">${ew(r.netDeliveryEw)} = ${ew(r.assignedEw)} + ${ew(r.reserveEw)} + <span class="${
+    r.shortfallEw > 0 ? 'neg' : ''
+  }">(${ew(r.headroomEw)})</span></span>`;
+}
+
+function allocationsTeamCard(plan: TeamQuarterPlan, back: string): string {
+  const r = plan.reconciliation;
+  const rows = plan.workPackages.length
+    ? plan.workPackages.map((wp) => workPackageRow(wp, plan, back)).join('')
+    : emptyRow(7, 'No work has been accepted for this team this quarter.');
+
+  const shortfall =
+    r.shortfallEw > 0
+      ? callout({
+          tone: 'crit',
+          icon: '▲',
+          title: `${plan.team.name} is overallocated by ${ew(r.shortfallEw)} ew`,
+          body: `<p>Nothing has been adjusted to hide it. Reduce assignments, reduce the reserve deliberately,
+            or revisit what ${e(plan.team.name)} accepted.</p>`,
+        })
+      : '';
+
+  return card({
+    title: plan.team.name,
+    sub: `${identityHtml(plan)} <span style="margin-left:8px">net delivery = assigned + reserve + headroom</span>`,
+    body: shortfall || undefined,
+    raw: table(WORK_HEAD, rows, WORK_COLS),
+    foot: `<button type="button" class="btn ghost small" data-dialog="dlg-accept-${plan.team.id}">Accept a WorkPackage onto ${e(
+      plan.team.name,
+    )}'s work list…</button>`,
+  });
+}
+
+function engineeringSummary(t: EngineeringTotals): string {
+  return chain([
+    { label: 'Net delivery', value: ew(t.netDeliveryEw), unit: 'ew', tone: 'result', den: 'summed across the teams' },
+    { op: '=' },
+    { label: 'Assigned', value: ew(t.assignedEw), unit: 'ew', den: 'sum of the teams’ assignments' },
+    { op: '+' },
+    { label: 'Unplanned Work reserve', value: ew(t.reserveEw), unit: 'ew', den: 'sum of the teams’ reserves' },
+    { op: '+' },
+    {
+      label: 'Unassigned headroom',
+      value: ew(t.surplusHeadroomEw),
+      unit: 'ew',
+      tone: 'good',
+      den: `held by ${plural(t.teamsWithHeadroom, 'team')} — spendable only on that team's own work`,
+    },
+    {
+      label: 'Shortfall',
+      value: ew(t.shortfallEw),
+      unit: 'ew',
+      tone: t.shortfallEw > 0 ? 'crit' : undefined,
+      aside: true,
+      den: `${plural(t.teamsWithShortfall, 'overallocated team')} — never covered by another team's headroom`,
+    },
+  ]);
+}
+
+export function allocationsSummaryRegion(eng: EngineeringQuarter): string {
+  const t = eng.totals;
+  const overallocated = eng.plans.filter((p) => p.reconciliation.shortfallEw > 0);
+  const warning =
+    t.shortfallEw > 0
+      ? callout({
+          tone: 'crit',
+          icon: '▲',
+          title: `${ew(t.shortfallEw)} ew of shortfall stands in ${overallocated.map((p) => p.team.name).join(', ')}`,
+          body: `<p>The ${ew(t.surplusHeadroomEw)} ew of headroom held elsewhere does not cover it: capacity belongs to
+            a team and its people are not interchangeable. Resolve each shortfall in that team's own reconciliation.</p>`,
+        })
+      : '';
+  return `${engineeringSummary(t)}
+${warning ? `<div style="margin-top:14px">${warning}</div>` : ''}
+<p class="footnote" style="margin-top:12px">Arithmetic residual across Engineering:
+  <b>${ew(t.netHeadroomEw)} ew</b> (headroom − shortfall). A bookkeeping figure, not deployable capacity.</p>`;
+}
+
+export function allocationsReconRegion(eng: EngineeringQuarter, ctx: ViewContext, back: string): string {
+  const t = eng.totals;
+  const rows = eng.plans
     .map((p) => {
       const r = p.reconciliation;
-      const rows = p.workPackages.map((wp) => workPackageRow(wp, p.team.id, back)).join('');
-      return `<h3>${e(p.team.name)}</h3>
-<section class="card">
-<p><code>${ew(r.netDeliveryEw)} = ${ew(r.assignedEw)} + ${ew(r.reserveEw)} + (${ew(r.headroomEw)})</code>
-  — net delivery = assigned + reserve + headroom${
+      const reserve = numericCell({
+        field: `reserve:${p.team.id}`,
+        label: `Unplanned Work reserve for ${p.team.name}`,
+        action: '/reserve',
+        name: 'engineer_weeks',
+        value: r.reserveEw,
+        display: ew(r.reserveEw),
+        unit: 'ew',
+        step: '0.1',
+        min: '0',
+        spoken: 'engineer-weeks',
+        hidden: { back, team_id: p.team.id, quarter_id: p.quarter.id },
+      });
+      return `<tr>
+  <td><a href="${e(viewHref('/allocations', ctx, { teamId: p.team.id }))}">${e(p.team.name)}</a>
+    <span class="sub2"><a href="/plan/${p.team.id}/${p.quarter.id}">team detail</a></span></td>
+  <td class="num">${ew(r.netDeliveryEw)}</td>
+  <td class="num">${ew(r.assignedEw)}</td>
+  <td class="num">${reserve}</td>
+  <td class="num">${
     r.shortfallEw > 0
-      ? ` <span class="shortfall">— SHORTFALL ${ew(r.shortfallEw)} ew; this team is overallocated and nothing has been adjusted to hide it.</span>`
-      : ''
-  }</p>
-<table>${WORK_HEADER}${rows || `<tr><td colspan="6" class="muted">No work accepted for this team.</td></tr>`}</table>
-<details><summary>Accept a WorkPackage onto ${e(p.team.name)}'s work list</summary>
-<form class="block" method="post" action="/work-packages">
-  <input type="hidden" name="back" value="${e(back)}">
-  <input type="hidden" name="team_id" value="${p.team.id}"><input type="hidden" name="quarter_id" value="${eng.quarter.id}">
-  <label>Name <input name="name" required></label>
-  <label>Delivery investment category <select name="category">${CATEGORIES.map((c) => `<option>${e(c)}</option>`).join('')}</select></label>
-  <label>Rough estimate — this team's contribution (ew) <input type="number" name="estimate_ew" step="0.1" min="0" required></label>
-  <label class="wide">Notes <input name="notes"></label>
-  <div><button>Accept onto work list</button></div>
-</form></details>
-</section>`;
+      ? `<span class="pill crit">${ew(r.shortfallEw)} ew short</span>`
+      : `<span class="pill good">${ew(r.headroomEw)} ew headroom</span>`
+  }</td>
+</tr>`;
     })
     .join('');
 
-  return layout(
-    'Allocations',
-    `<h1>Engineering allocations — ${e(eng.quarter.name)}</h1>
-<p class="muted">All work accepted for the quarter, across teams. Assignments, reserves, reconciliation and feasibility
-belong to a team-quarter; this view collects them and never pools capacity between teams.</p>
-${syntheticNote(teams.map((x) => x.name))}
-<section class="card">
-${quarterSelector('/allocations', quarters, ctx)}
-${teamFilter('/allocations', teams, ctx)}
-</section>
+  const head = `<tr><th>Team</th><th class="num">Net delivery</th><th class="num">Assigned</th>
+    <th class="num">Unplanned Work reserve</th><th class="num">Headroom or shortfall</th></tr>`;
+  const total = `<tr class="total"><td>Engineering total</td>
+    <td class="num">${ew(t.netDeliveryEw)}</td><td class="num">${ew(t.assignedEw)}</td><td class="num">${ew(t.reserveEw)}</td>
+    <td class="num"><span class="pill good">${ew(t.surplusHeadroomEw)} headroom</span>${
+      t.shortfallEw > 0 ? ` <span class="pill crit">${ew(t.shortfallEw)} short</span>` : ''
+    }</td></tr>`;
 
-<h2>Engineering-wide reconciliation</h2>
-<section class="card">
-${engineeringTotalsTable(t)}
-</section>
+  return table(head, (rows || emptyRow(5, 'No teams yet.')) + total);
+}
 
-<h2>Per-team reconciliation</h2>
-<section class="card">
-<table>
-<tr><th>Team</th><th class="num">Net delivery</th><th class="num">Assigned</th><th class="num">Unplanned Work reserve</th><th class="num">Headroom / shortfall</th></tr>
-${eng.plans.map((p) => teamReconciliationRow(p, back, ctx)).join('') || '<tr><td colspan="5" class="muted">No teams yet.</td></tr>'}
-<tr class="total"><td>Engineering total</td><td class="num">${ew(t.netDeliveryEw)}</td><td class="num">${ew(t.assignedEw)}</td>
-  <td class="num">${ew(t.reserveEw)}</td>
-  <td class="num"><span class="ok">${ew(t.surplusHeadroomEw)} headroom</span>${
-    t.shortfallEw > 0 ? ` / <span class="shortfall">${ew(t.shortfallEw)} shortfall</span>` : ''
-  }</td></tr>
-</table>
-<p class="muted">Every team is listed here whatever the team filter, so a shortfall is never hidden by filtering.</p>
-</section>
+export function allocationsMixRegion(eng: EngineeringQuarter): string {
+  const t = eng.totals;
+  const head = `<tr><th>Category</th><th class="num">Assigned (ew)</th>
+    <th class="num">% of Engineering net delivery capacity (${ew(t.netDeliveryEw)} ew)</th></tr>`;
+  const rows =
+    CATEGORIES.map(
+      (c) =>
+        `<tr><td>${e(c)}</td><td class="num">${ew(eng.byCategory[c].ew)}</td><td class="num">${pct(
+          eng.byCategory[c].percent,
+        )}</td></tr>`,
+    ).join('') +
+    `<tr><td>Unplanned Work reserve <span class="sub2">unclassified until consumed</span></td>
+      <td class="num">${ew(t.reserveEw)}</td><td class="num">${pct(shareOfNetDelivery(t.reserveEw, t))}</td></tr>
+    <tr><td>Unassigned headroom</td><td class="num">${ew(t.surplusHeadroomEw)}</td>
+      <td class="num">${pct(shareOfNetDelivery(t.surplusHeadroomEw, t))}</td></tr>` +
+    (t.shortfallEw > 0
+      ? `<tr><td>Shortfall in overallocated teams</td>
+        <td class="num"><span style="color:var(--crit)">−${ew(t.shortfallEw)}</span></td>
+        <td class="num"><span style="color:var(--crit)">−${pct(shareOfNetDelivery(t.shortfallEw, t))}</span></td></tr>`
+      : '');
+  return table(head, rows);
+}
 
-<h2>Delivery investment mix</h2>
-<section class="card">
-<table>
-<tr><th>Category</th><th class="num">Assigned (ew)</th><th class="num">% of Engineering net delivery capacity (${ew(t.netDeliveryEw)} ew)</th></tr>
-${CATEGORIES.map((c) => `<tr><td>${e(c)}</td><td class="num">${ew(eng.byCategory[c].ew)}</td><td class="num">${pct(eng.byCategory[c].percent)}</td></tr>`).join('')}
-<tr><td class="muted">Unplanned Work reserve (unclassified)</td><td class="num">${ew(t.reserveEw)}</td><td class="num">${pct(shareOfNetDelivery(t.reserveEw, t))}</td></tr>
-<tr><td class="muted">Unassigned headroom</td><td class="num">${ew(t.surplusHeadroomEw)}</td><td class="num">${pct(shareOfNetDelivery(t.surplusHeadroomEw, t))}</td></tr>
+export function allocationsStatesRegion(eng: EngineeringQuarter, ctx: ViewContext): string {
+  const scope = ctx.teamId === null ? 'across Engineering' : 'across Engineering (the team filter does not narrow these counts)';
+  return `<div class="pillrow">${(Object.keys(STATE_LABELS) as PlanningState[])
+    .map((s) => `<span class="pill ${STATE_TONE[s]}">${e(STATE_LABELS[s])}: ${eng.stateCounts[s]}</span>`)
+    .join('')}</div>
+<p class="footnote" style="margin-top:8px">Non-overlapping counts ${e(scope)}.</p>`;
+}
+
+export function allocationsTeamsRegion(eng: EngineeringQuarter, ctx: ViewContext, back: string): string {
+  const shown = ctx.teamId === null ? eng.plans : eng.plans.filter((p) => p.team.id === ctx.teamId);
+  if (!shown.length) return card({ raw: emptyState('No teams in scope', 'Clear the team filter to see the work list.') });
+  return `<div class="stack">${shown.map((p) => allocationsTeamCard(p, back)).join('')}</div>`;
+}
+
+const STATE_RULES = `<p class="footnote">States are non-overlapping. <b>Feasible</b> requires a recorded technical-lead
+judgment; the arithmetic never confers it. A feasible verdict is refused unless capacity is assigned, the owning
+team-quarter has no shortfall, and — when assigned capacity is below the estimate — the reduced scope is stated.
+A judgment is flagged for reassessment, and stops counting as feasible, once any planning input of its team-quarter
+changes, and stays flagged until a fresh judgment is recorded. Judgment history is kept.</p>`;
+
+function workDialogs(eng: EngineeringQuarter, back: string): string[] {
+  const out: string[] = [];
+  for (const plan of eng.plans) {
+    out.push(
+      dialog({
+        id: `dlg-accept-${plan.team.id}`,
+        title: `Accept a WorkPackage onto ${plan.team.name}'s work list`,
+        scope: `${plan.team.name} · ${plan.quarter.name}`,
+        action: '/work-packages',
+        hidden: { back, team_id: plan.team.id, quarter_id: plan.quarter.id },
+        label: 'the WorkPackage',
+        submitLabel: 'Accept onto work list',
+        body: `${field('Name', '<input type="text" name="name" required>')}
+      ${field(
+        'Delivery investment category',
+        `<select name="category">${CATEGORIES.map((c) => `<option>${e(c)}</option>`).join('')}</select>`,
+      )}
+      ${field('Rough estimate — this team’s contribution (ew)', '<input type="number" name="estimate_ew" step="0.1" min="0" required>')}
+      ${field('Notes', '<input type="text" name="notes">', 'optional')}
+      <p>Accepting work claims no capacity. It is assigned separately, and partial assignment stays visible as partial.</p>`,
+      }),
+    );
+
+    for (const wp of plan.workPackages) {
+      out.push(
+        dialog({
+          id: `dlg-judge-${wp.id}`,
+          title: `Record a feasibility judgment for ${wp.name}`,
+          scope: `${plan.team.name} · ${plan.quarter.name} · ${ew(wp.assignedEw)} of ${ew(wp.estimateEw)} ew assigned`,
+          action: `/work-packages/${wp.id}/feasibility`,
+          hidden: { back },
+          label: `the judgment for ${wp.name}`,
+          submitLabel: 'Record judgment',
+          body: `${field(
+            'Verdict',
+            `<select name="verdict"><option value="feasible">Feasible</option><option value="not_feasible">Not feasible</option></select>`,
+          )}
+        ${field('Judged by (responsible technical lead)', '<input type="text" name="judged_by" required>')}
+        ${field(
+          'Material assumptions',
+          '<textarea name="assumptions" rows="3" required placeholder="What this judgment rests on: estimates held, specialist availability, dependencies, delivery window…"></textarea>',
+        )}
+        ${field(
+          'Reduced scope this judgment covers',
+          '<input type="text" name="scope_note" placeholder="e.g. ingestion phase only">',
+          'required when assigned capacity is below the estimate',
+        )}
+        <p>A feasible verdict is refused unless capacity is assigned, ${e(plan.team.name)} has no shortfall, and any
+          reduced scope is stated. A not-feasible verdict is always recordable.</p>`,
+        }),
+      );
+
+      out.push(
+        dialog({
+          id: `dlg-rm-wp-${wp.id}`,
+          title: `Remove ${wp.name} from the work list?`,
+          scope: `${plan.team.name} · ${plan.quarter.name}`,
+          action: `/work-packages/${wp.id}/delete`,
+          hidden: { back },
+          label: wp.name,
+          submitLabel: 'Remove from work list',
+          destructive: true,
+          body: `<p>This permanently removes ${e(wp.name)}, its <b>${ew(wp.assignedEw)} ew</b> assignment${
+            wp.judgments.length
+              ? ` and <b>${plural(wp.judgments.length, 'recorded feasibility judgment')}</b>`
+              : ''
+          }.</p>
+        ${
+          wp.assignedEw > 0.005
+            ? `<p>${e(plan.team.name)} gets <b>${ew(wp.assignedEw)} ew</b> back, and every other feasibility judgment
+              in ${e(plan.team.name)} · ${e(plan.quarter.name)} will need reassessment because the capacity they were
+              judged against has changed.</p>`
+            : ''
+        }
+        <p>This cannot be undone.</p>`,
+        }),
+      );
+    }
+  }
+  return out;
+}
+
+export function allocationsPage(input: {
+  quarters: QuarterRow[];
+  teams: TeamRow[];
+  eng: EngineeringQuarter | null;
+  ctx: ViewContext;
+}): string {
+  const { quarters, teams, eng, ctx } = input;
+  const contextBar = { path: '/allocations', quarters, teams, ctx };
+
+  if (!eng) {
+    return layout({
+      title: 'Allocations',
+      active: 'allocations',
+      ctx,
+      contextBar,
+      body: `${pageHead({ title: 'Engineering allocations' })}
+${card({ raw: emptyState('No quarter selected', 'Add a quarter under <a href="/setup">Setup</a> to plan against it.') })}`,
+    });
+  }
+
+  const back = viewHref('/allocations', ctx);
+  const t = eng.totals;
+  const scoped = ctx.teamId !== null;
+  const teamName = teams.find((x) => x.id === ctx.teamId)?.name;
+
+  return layout({
+    title: 'Allocations',
+    active: 'allocations',
+    ctx,
+    contextBar: {
+      ...contextBar,
+      trailing: `${plural(eng.workPackages.length, 'WorkPackage')} · ${plural(eng.plans.length, 'team')}`,
+    },
+    body: `${pageHead({
+      title: 'Engineering allocations',
+      meta: `${quarterMeta(eng.quarter, eng.plans[0])} · assignments, reserves, reconciliation and feasibility belong to a
+        team-quarter; this view collects them and never pools capacity between teams`,
+    })}
+${isSynthetic(teams.map((x) => x.name)) ? `<div style="margin-bottom:14px">${SYNTHETIC_NOTE}</div>` : ''}
+${card({
+  title: 'Engineering-wide reconciliation',
+  sub: 'Summed quantities · headroom and shortfall reported separately',
+  body: region('alloc-summary', allocationsSummaryRegion(eng)),
+  sticky: true,
+})}
+${card({
+  title: 'Per-team reconciliation',
+  sub: 'Every team is listed whatever the filter, so a shortfall is never hidden',
+  raw: region('alloc-recon', allocationsReconRegion(eng, ctx, back)),
+  foot: `<p class="footnote">The Unplanned Work reserve is capacity a team intends to spend on work that is not yet
+    known. It is not overhead and not headroom, and it stays outside the investment categories until it is consumed.</p>`,
+})}
+${card({
+  title: 'Delivery investment mix',
+  sub: `Denominator: Engineering net delivery capacity, ${ew(t.netDeliveryEw)} ew`,
+  raw: region('alloc-mix', allocationsMixRegion(eng)),
+  foot: `<p class="footnote">Percentages are computed from summed engineer-weeks over summed net delivery capacity —
+    never by averaging the teams' percentages. They describe investment shape only; they never show whether work fits.</p>`,
+})}
+${card({
+  title: 'Work list',
+  sub: scoped && teamName ? `Showing ${e(teamName)} · counts below cover all teams` : undefined,
+  body: `${region('alloc-states', allocationsStatesRegion(eng, ctx))}${STATE_RULES}`,
+})}
+${region('alloc-teams', allocationsTeamsRegion(eng, ctx, back))}
+${dialogWell(workDialogs(eng, back))}`,
+  });
+}
+
+// ---- pages: team-quarter detail --------------------------------------------------------------
+
+export function planChainRegion(plan: TeamQuarterPlan): string {
+  const cap = plan.capacity;
+  return chain([
+    { label: 'Contracted', value: ew(cap.contractedEw), unit: 'ew', den: 'schedules × effective dates' },
+    { op: '−' },
+    { label: 'Known absence', value: ew(cap.absenceEw), unit: 'ew', den: 'holidays and leave, counted once per day' },
+    { op: '=' },
+    { label: 'Available', value: ew(cap.availableEw), unit: 'ew', den: 'workforce capacity' },
+    { op: '−' },
+    { label: 'Overhead', value: ew(cap.overheadEw), unit: 'ew', den: 'management &amp; admin' },
+    { op: '=' },
+    { label: 'Net delivery', value: ew(cap.netDeliveryEw), unit: 'ew', tone: 'result' },
+    {
+      label: 'Overhead ratio',
+      value: pct(cap.overheadRatio === null ? null : cap.overheadRatio * 100),
+      aside: true,
+      den: `${ew(cap.overheadEw)} ÷ ${ew(cap.availableEw)} ew available`,
+    },
+  ]);
+}
+
+const PERSON_COLS =
+  '<colgroup><col class="name"><col class="narrow"><col class="wide">' +
+  '<col class="narrow"><col class="narrow"><col class="narrow"><col class="narrow">' +
+  '<col class="overhead"><col class="narrow"><col class="acts"></colgroup>';
+const WORK_COLS =
+  '<colgroup><col class="name"><col class="narrow"><col><col><col class="narrow"><col class="wide"><col class="acts"></colgroup>';
+
+export function planCensusRegion(plan: TeamQuarterPlan, back: string): string {
+  const cap = plan.capacity;
+  const rows = plan.people.length
+    ? plan.people.map((p) => personRow(p, cap.people.find((c) => c.personId === p.id)!, plan, back)).join('') +
+      `<tr class="total"><td>Team total</td><td></td><td></td><td></td>
+        <td class="num">${ew(cap.contractedEw)}</td><td class="num">${ew(cap.absenceEw)}</td>
+        <td class="num">${ew(cap.availableEw)}</td><td class="num">${ew(cap.overheadEw)}</td>
+        <td class="num">${ew(cap.netDeliveryEw)}</td><td></td></tr>`
+    : emptyRow(10, 'Nobody is on this team yet.');
+  return table(CENSUS_HEAD, rows, PERSON_COLS);
+}
+
+export function planWorkRegion(plan: TeamQuarterPlan, back: string): string {
+  const rows = plan.workPackages.length
+    ? plan.workPackages.map((wp) => workPackageRow(wp, plan, back)).join('')
+    : emptyRow(7, 'No work has been accepted for this team this quarter.');
+  return table(WORK_HEAD, rows, WORK_COLS);
+}
+
+export function planReconRegion(plan: TeamQuarterPlan, back: string): string {
+  const r = plan.reconciliation;
+  const reserve = numericCell({
+    field: `reserve:${plan.team.id}`,
+    label: `Unplanned Work reserve for ${plan.team.name}`,
+    action: '/reserve',
+    name: 'engineer_weeks',
+    value: r.reserveEw,
+    display: ew(r.reserveEw),
+    unit: 'ew',
+    step: '0.1',
+    min: '0',
+    spoken: 'engineer-weeks',
+    hidden: { back, team_id: plan.team.id, quarter_id: plan.quarter.id },
+  });
+
+  return `${chain([
+    { label: 'Net delivery', value: ew(r.netDeliveryEw), unit: 'ew', tone: 'result', den: 'from the capacity chain' },
+    { op: '=' },
+    { label: 'Assigned', value: ew(r.assignedEw), unit: 'ew', den: 'sum of the assignments below' },
+    { op: '+' },
+    { label: 'Unplanned Work reserve', value: ew(r.reserveEw), unit: 'ew', den: 'not overhead, not headroom' },
+    { op: '+' },
+    r.shortfallEw > 0
+      ? { label: 'Shortfall', value: ew(r.shortfallEw), unit: 'ew', tone: 'crit' as const, den: 'this draft is overallocated' }
+      : { label: 'Headroom', value: ew(r.headroomEw), unit: 'ew', tone: 'good' as const, den: 'unclaimed by any work' },
+  ])}
+<div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+  <span class="ctx-label">Set the reserve</span>${reserve}
+</div>
+<p class="footnote" style="margin-top:10px">${identityHtml(plan)}</p>
 ${
-  t.shortfallEw > 0
-    ? `<tr><td class="muted">Shortfall (overallocated teams)</td><td class="num"><span class="shortfall">−${ew(t.shortfallEw)}</span></td><td class="num">−${pct(
-        shareOfNetDelivery(t.shortfallEw, t),
-      )}</td></tr>`
+  r.shortfallEw > 0
+    ? `<div style="margin-top:14px">${callout({
+        tone: 'crit',
+        icon: '▲',
+        title: `Overallocated by ${ew(r.shortfallEw)} ew`,
+        body: `<p>Nothing has been adjusted to hide it. Reduce assignments, reduce the reserve deliberately, or revisit what was accepted.</p>`,
+      })}</div>`
     : ''
 }
-</table>
-<p class="muted">Percentages are computed from summed engineer-weeks over Engineering net delivery capacity — never by averaging the teams' percentages.
-They describe investment shape only; they never show whether work fits. Fit is the reconciliation above plus the recorded feasibility judgments.</p>
-</section>
+<h2 class="section">Delivery investment mix</h2>
+${table(
+  `<tr><th>Category</th><th class="num">Assigned (ew)</th><th class="num">% of this team's net delivery capacity (${ew(
+    plan.mix.denominatorEw,
+  )} ew)</th></tr>`,
+  CATEGORIES.map(
+    (c) =>
+      `<tr><td>${e(c)}</td><td class="num">${ew(plan.mix.byCategory[c].ew)}</td><td class="num">${pct(
+        plan.mix.byCategory[c].percent,
+      )}</td></tr>`,
+  ).join('') +
+    `<tr><td>Unplanned Work reserve <span class="sub2">unclassified until consumed</span></td>
+      <td class="num">${ew(plan.mix.reserve.ew)}</td><td class="num">${pct(plan.mix.reserve.percent)}</td></tr>
+    <tr><td>Unassigned headroom${r.shortfallEw > 0 ? ' (negative: shortfall)' : ''}</td>
+      <td class="num">${ew(plan.mix.headroom.ew)}</td><td class="num">${pct(plan.mix.headroom.percent)}</td></tr>`,
+)}`;
+}
 
-<h2>Work list</h2>
-<section class="card">
-<p>${stateSummary}</p>
-${STATE_RULES}
-</section>
-${teamSections || '<p class="muted">No teams yet.</p>'}`,
-    'allocations',
-    ctx,
-  );
+export function planStatesRegion(plan: TeamQuarterPlan): string {
+  return `<div class="pillrow">${(Object.keys(STATE_LABELS) as PlanningState[])
+    .map((s) => `<span class="pill ${STATE_TONE[s]}">${e(STATE_LABELS[s])}: ${plan.stateCounts[s]}</span>`)
+    .join('')}</div>`;
 }
 
 export function planPage(plan: TeamQuarterPlan): string {
-  const { team, quarter, capacity, reconciliation: rec, mix } = plan;
-  const base = `/plan/${team.id}/${quarter.id}`;
-  const ctx: ViewContext = { quarterId: quarter.id, teamId: team.id };
+  const ctx: ViewContext = { quarterId: plan.quarter.id, teamId: plan.team.id };
+  const back = `/plan/${plan.team.id}/${plan.quarter.id}`;
 
-  const peopleRows = plan.people
-    .map((p) => `<tr>${personCells(p, capacity.people.find((c) => c.personId === p.id)!, quarter.id, base)}</tr>`)
-    .join('');
-  const wpRows = plan.workPackages.map((wp) => workPackageRow(wp, team.id, base)).join('');
-  const stateSummary = (Object.keys(STATE_LABELS) as PlanningState[])
-    .map((s) => `<span class="badge ${s}">${e(STATE_LABELS[s])}: ${plan.stateCounts[s]}</span>`)
-    .join(' ');
-  const headroomCell =
-    rec.shortfallEw > 0
-      ? `<span class="shortfall">SHORTFALL ${ew(rec.shortfallEw)} ew</span><br><span class="muted">headroom ${ew(rec.headroomEw)}</span>`
-      : `<span class="ok">${ew(rec.headroomEw)} ew headroom</span>`;
+  const dialogs = [
+    ...personDialogs(plan, back),
+    dialog({
+      id: 'dlg-add-person',
+      title: `Add a person to ${plan.team.name}`,
+      scope: `${plan.team.name} · capacity belongs to this team`,
+      action: '/people',
+      hidden: { back, team_id: plan.team.id },
+      label: 'the new person',
+      submitLabel: 'Add person',
+      body: `${field('Name', '<input type="text" name="name" required>')}
+      <div class="pair">
+        ${field('Schedule fraction', '<input type="number" name="fraction" step="0.05" min="0.05" max="1" value="1" required>', '1 = full-time')}
+        ${field('Joined', '<input type="date" name="joined">', 'blank = before the quarter')}
+      </div>
+      ${field('Left', '<input type="date" name="left">', 'blank = still here')}`,
+    }),
+  ];
 
-  return layout(
-    `${team.name} · ${quarter.name}`,
-    `<h1>${e(team.name)} · ${e(quarter.name)}</h1>
-<p class="muted">${e(quarter.start)} → ${e(quarter.end)} · ${plan.workingDaysInQuarter} working days (Mon–Fri) · ${
-      plan.holidaysInQuarter.length
-    } holiday${plan.holidaysInQuarter.length === 1 ? '' : 's'} in this quarter${
-      plan.holidayCalendarSize === 0 ? ' · <strong>holiday calendar is empty</strong>' : ''
-    } · unit: engineer-weeks (ew)</p>
-<p class="muted">Team-quarter detail. The Engineering-wide views —
-<a href="${e(viewHref('/census', ctx))}">Census</a>, <a href="${e(viewHref('/capacity', ctx))}">Capacity</a>,
-<a href="${e(viewHref('/allocations', ctx))}">Allocations</a> — cover this and every other team without opening one.</p>
-${syntheticNote([team.name, quarter.name])}
-
-<h2>1 · Capacity chain</h2>
-<section class="card">
-<div class="chain">
-  <div><div class="label">Contracted capacity</div><div class="value">${ew(capacity.contractedEw)} ew</div><div class="muted">schedules × effective dates</div></div>
-  <div><div class="label">− Known absences</div><div class="value">${ew(capacity.absenceEw)} ew</div><div class="muted">holidays ∪ leave, once per day</div></div>
-  <div><div class="label">= Available workforce capacity</div><div class="value">${ew(capacity.availableEw)} ew</div></div>
-  <div><div class="label">− Overhead</div><div class="value">${ew(capacity.overheadEw)} ew</div><div class="muted">management &amp; admin, reported separately</div></div>
-  <div><div class="label">= Net delivery capacity</div><div class="value">${ew(capacity.netDeliveryEw)} ew</div></div>
-  <div><div class="label">Overhead ratio</div><div class="value">${pct(capacity.overheadRatio === null ? null : capacity.overheadRatio * 100)}</div><div class="muted">overhead ÷ available workforce capacity</div></div>
-</div>
-</section>
-
-<h2>2 · Census</h2>
-<section class="card">
-<table>${PERSON_HEADER}
-${peopleRows || '<tr><td colspan="9" class="muted">No people yet.</td></tr>'}
-<tr class="total"><td>Team total</td><td></td><td></td><td></td><td class="num">${ew(capacity.contractedEw)}</td><td class="num">${ew(capacity.absenceEw)}</td><td class="num">${ew(capacity.availableEw)}</td><td class="num">${ew(capacity.overheadEw)}</td><td class="num">${ew(capacity.netDeliveryEw)}</td></tr>
-</table>
-<h3>Add a person to ${e(team.name)}</h3>
-<form class="block" method="post" action="/people">
-  <input type="hidden" name="back" value="${base}"><input type="hidden" name="team_id" value="${team.id}">
-  <label>Name <input name="name" required></label>
-  <label>Schedule fraction (1 = full-time) <input type="number" name="fraction" step="0.05" min="0.05" max="1" value="1" required></label>
-  <label>Joined (blank = before quarter) <input type="date" name="joined"></label>
-  <label>Left (blank = still here) <input type="date" name="left"></label>
-  <div><button>Add person</button></div>
-</form>
-</section>
-
-<h2>3 · Quarterly work list</h2>
-<section class="card">
-<p>${stateSummary}</p>
-${STATE_RULES}
-<table>${WORK_HEADER}
-${wpRows || '<tr><td colspan="6" class="muted">No work accepted yet.</td></tr>'}
-</table>
-<h3>Accept a WorkPackage onto ${e(team.name)}'s work list</h3>
-<form class="block" method="post" action="/work-packages">
-  <input type="hidden" name="back" value="${base}">
-  <input type="hidden" name="team_id" value="${team.id}"><input type="hidden" name="quarter_id" value="${quarter.id}">
-  <label>Name <input name="name" required></label>
-  <label>Delivery investment category <select name="category">${CATEGORIES.map((c) => `<option>${e(c)}</option>`).join('')}</select></label>
-  <label>Rough estimate — this team's contribution (ew) <input type="number" name="estimate_ew" step="0.1" min="0" required></label>
-  <label class="wide">Notes <input name="notes"></label>
-  <div><button>Accept onto work list</button></div>
-</form>
-</section>
-
-<h2>4 · Reconciliation</h2>
-<section class="card">
-<table>
-<tr><th>Net delivery capacity</th><th class="num">${ew(rec.netDeliveryEw)} ew</th><td class="muted">from the capacity chain</td></tr>
-<tr><th>Assigned delivery capacity</th><th class="num">${ew(rec.assignedEw)} ew</th><td class="muted">sum of assignments above</td></tr>
-<tr><th>Unplanned Work reserve</th><th class="num">${ew(rec.reserveEw)} ew</th><td>
-  <form class="inline" method="post" action="/reserve"><input type="hidden" name="back" value="${base}">
-    <input type="hidden" name="team_id" value="${team.id}"><input type="hidden" name="quarter_id" value="${quarter.id}">
-    <input type="number" name="engineer_weeks" step="0.1" min="0" value="${rec.reserveEw}"> ew <button class="quiet">Set reserve</button></form>
-  <span class="muted">explicit reserve for work not yet known; not overhead, not headroom, unclassified until consumed</span></td></tr>
-<tr><th>Remaining unassigned headroom</th><th class="num">${headroomCell}</th><td class="muted">net − assigned − reserve</td></tr>
-</table>
-<p><code>${ew(rec.netDeliveryEw)} = ${ew(rec.assignedEw)} + ${ew(rec.reserveEw)} + (${ew(rec.headroomEw)})</code>
-${rec.shortfallEw > 0 ? '<span class="shortfall">— this draft is overallocated; nothing has been adjusted to hide it.</span>' : ''}</p>
-
-<h3>Delivery investment mix</h3>
-<table>
-<tr><th>Category</th><th class="num">Assigned (ew)</th><th class="num">% of this team's net delivery capacity (${ew(mix.denominatorEw)} ew)</th></tr>
-${CATEGORIES.map((c) => `<tr><td>${e(c)}</td><td class="num">${ew(mix.byCategory[c].ew)}</td><td class="num">${pct(mix.byCategory[c].percent)}</td></tr>`).join('')}
-<tr><td class="muted">Unplanned Work reserve (unclassified)</td><td class="num">${ew(mix.reserve.ew)}</td><td class="num">${pct(mix.reserve.percent)}</td></tr>
-<tr><td class="muted">Unassigned headroom${rec.shortfallEw > 0 ? ' (negative: shortfall)' : ''}</td><td class="num">${ew(mix.headroom.ew)}</td><td class="num">${pct(mix.headroom.percent)}</td></tr>
-</table>
-<p class="muted">Percentages describe investment shape only; they never show whether work fits.</p>
-</section>`,
-    'team',
+  return layout({
+    title: `${plan.team.name} · ${plan.quarter.name}`,
+    active: 'team',
     ctx,
-  );
+    body: `${pageHead({
+      title: `${plan.team.name} · ${plan.quarter.name}`,
+      meta: `${quarterMeta(plan.quarter, plan)} · team-quarter detail`,
+      actions: `<a class="btn ghost" href="${e(viewHref('/census', ctx))}">Census</a>
+        <a class="btn ghost" href="${e(viewHref('/capacity', ctx))}">Capacity</a>
+        <a class="btn ghost" href="${e(viewHref('/allocations', ctx))}">Allocations</a>`,
+    })}
+<div class="stack" style="margin-bottom:14px">
+  ${holidayCallout(plan, ctx)}
+  ${isSynthetic([plan.team.name, plan.quarter.name]) ? SYNTHETIC_NOTE : ''}
+  ${callout({
+    tone: 'info',
+    icon: '◆',
+    title: 'This is optional detail',
+    body: `<p>Everything here is also reachable, for this team and every other, from the Engineering-wide views.</p>`,
+  })}
+</div>
+${card({ title: 'Capacity chain', body: region('plan-chain', planChainRegion(plan)) })}
+${card({
+  title: 'Census',
+  sub: `${plural(plan.people.length, 'person', 'people')}`,
+  raw: region('plan-census', planCensusRegion(plan, back)),
+  foot: `<button type="button" class="btn ghost small" data-dialog="dlg-add-person">Add a person to ${e(
+    plan.team.name,
+  )}…</button>`,
+})}
+${card({
+  title: 'Reconciliation',
+  sub: 'net delivery = assigned + reserve + headroom',
+  body: region('plan-recon', planReconRegion(plan, back)),
+  foot: `<p class="footnote">Percentages describe investment shape only; they never show whether work fits.</p>`,
+})}
+${card({
+  title: 'Quarterly work list',
+  sub: region('plan-states', planStatesRegion(plan), 'span'),
+  raw: region('plan-work', planWorkRegion(plan, back)),
+  foot: `<button type="button" class="btn ghost small" data-dialog="dlg-accept-${plan.team.id}">Accept a WorkPackage onto ${e(
+    plan.team.name,
+  )}'s work list…</button>${STATE_RULES}`,
+})}
+${dialogWell([
+  ...dialogs,
+  dialog({
+    id: `dlg-accept-${plan.team.id}`,
+    title: `Accept a WorkPackage onto ${plan.team.name}'s work list`,
+    scope: `${plan.team.name} · ${plan.quarter.name}`,
+    action: '/work-packages',
+    hidden: { back, team_id: plan.team.id, quarter_id: plan.quarter.id },
+    label: 'the WorkPackage',
+    submitLabel: 'Accept onto work list',
+    body: `${field('Name', '<input type="text" name="name" required>')}
+    ${field(
+      'Delivery investment category',
+      `<select name="category">${CATEGORIES.map((c) => `<option>${e(c)}</option>`).join('')}</select>`,
+    )}
+    ${field('Rough estimate — this team’s contribution (ew)', '<input type="number" name="estimate_ew" step="0.1" min="0" required>')}
+    ${field('Notes', '<input type="text" name="notes">', 'optional')}`,
+  }),
+  ...plan.workPackages.flatMap((wp) => [
+    dialog({
+      id: `dlg-judge-${wp.id}`,
+      title: `Record a feasibility judgment for ${wp.name}`,
+      scope: `${plan.team.name} · ${plan.quarter.name} · ${ew(wp.assignedEw)} of ${ew(wp.estimateEw)} ew assigned`,
+      action: `/work-packages/${wp.id}/feasibility`,
+      hidden: { back },
+      label: `the judgment for ${wp.name}`,
+      submitLabel: 'Record judgment',
+      body: `${field(
+        'Verdict',
+        `<select name="verdict"><option value="feasible">Feasible</option><option value="not_feasible">Not feasible</option></select>`,
+      )}
+      ${field('Judged by (responsible technical lead)', '<input type="text" name="judged_by" required>')}
+      ${field('Material assumptions', '<textarea name="assumptions" rows="3" required></textarea>')}
+      ${field('Reduced scope this judgment covers', '<input type="text" name="scope_note">', 'required when assigned is below the estimate')}`,
+    }),
+    dialog({
+      id: `dlg-rm-wp-${wp.id}`,
+      title: `Remove ${wp.name} from the work list?`,
+      scope: `${plan.team.name} · ${plan.quarter.name}`,
+      action: `/work-packages/${wp.id}/delete`,
+      hidden: { back },
+      label: wp.name,
+      submitLabel: 'Remove from work list',
+      destructive: true,
+      body: `<p>This permanently removes ${e(wp.name)}, its <b>${ew(wp.assignedEw)} ew</b> assignment${
+        wp.judgments.length ? ` and <b>${plural(wp.judgments.length, 'recorded feasibility judgment')}</b>` : ''
+      }. This cannot be undone.</p>`,
+    }),
+  ]),
+])}`,
+  });
+}
+
+// ---- pages: setup ----------------------------------------------------------------------------
+
+export function setupPage(input: {
+  quarters: QuarterRow[];
+  teams: TeamRow[];
+  holidays: HolidayRow[];
+  ctx: ViewContext;
+}): string {
+  const { quarters, teams, holidays, ctx } = input;
+
+  const quarterRows = quarters.length
+    ? quarters
+        .map(
+          (q) =>
+            `<tr><td><span class="name">${e(q.name)}</span></td><td>${e(q.start)} → ${e(q.end)}</td>
+             <td class="num"><a href="${e(viewHref('/capacity', ctx, { quarterId: q.id }))}">Open in Capacity</a></td></tr>`,
+        )
+        .join('')
+    : emptyRow(3, 'No quarters defined yet.');
+
+  const teamRows = teams.length
+    ? teams
+        .map(
+          (t) =>
+            `<tr><td><span class="name">${e(t.name)}</span></td>
+             <td class="num"><a href="${e(viewHref('/census', ctx, { teamId: t.id }))}">Open in Census</a></td></tr>`,
+        )
+        .join('')
+    : emptyRow(2, 'No teams defined yet.');
+
+  const holidayRows = holidays.length
+    ? holidays
+        .map(
+          (h) =>
+            `<tr><td>${e(h.date)}</td><td>${e(h.name)}</td>
+             <td class="mid">${rowMenu({
+               key: `holiday-${h.date}`,
+               label: `${h.name} on ${h.date}`,
+               items: [{ label: 'Remove holiday…', dialog: `dlg-rm-holiday-${h.date}`, danger: true }],
+             })}</td></tr>`,
+        )
+        .join('')
+    : emptyRow(3, 'No holidays entered — capacity is calculated as if none fall in any quarter.');
+
+  const dialogs = [
+    dialog({
+      id: 'dlg-add-quarter',
+      title: 'Add a quarter',
+      scope: 'An inclusive date range; capacity comes from the Mon–Fri days inside it',
+      action: '/quarters',
+      hidden: {},
+      label: 'the quarter',
+      submitLabel: 'Add quarter',
+      body: `${field('Name', '<input type="text" name="name" required placeholder="Q1 2027">')}
+      <div class="pair">${field('Start', '<input type="date" name="start" required>')}${field('End', '<input type="date" name="end" required>')}</div>`,
+    }),
+    dialog({
+      id: 'dlg-add-team',
+      title: 'Add a team',
+      scope: 'A team owns capacity and is the unit a quarterly plan is made for',
+      action: '/teams',
+      hidden: {},
+      label: 'the team',
+      submitLabel: 'Add team',
+      body: field('Name', '<input type="text" name="name" required placeholder="Team name">'),
+    }),
+    dialog({
+      id: 'dlg-add-holiday',
+      title: 'Add a holiday',
+      scope: 'Organization-wide · counts as known absence for everyone in force that day',
+      action: '/holidays',
+      hidden: { back: viewHref('/setup', ctx) },
+      label: 'the holiday',
+      submitLabel: 'Add holiday',
+      body: `<div class="pair">${field('Date', '<input type="date" name="date" required>')}${field(
+        'Name',
+        '<input type="text" name="name" required placeholder="Founders’ Day">',
+      )}</div>
+      <p>A holiday on a weekend has no effect, and a holiday inside someone's leave is counted once.</p>`,
+    }),
+    ...holidays.map((h) =>
+      dialog({
+        id: `dlg-rm-holiday-${h.date}`,
+        title: `Remove ${h.name}?`,
+        scope: `${h.date} · organization-wide`,
+        action: '/holidays/delete',
+        hidden: { date: h.date, back: viewHref('/setup', ctx) },
+        label: h.name,
+        submitLabel: 'Remove holiday',
+        destructive: true,
+        body: `<p>This raises available capacity for everyone in force on ${e(h.date)}, in every quarter containing it,
+        and every feasibility judgment for those team-quarters will need reassessment. This cannot be undone.</p>`,
+      }),
+    ),
+  ];
+
+  return layout({
+    title: 'Setup',
+    active: 'setup',
+    ctx,
+    contextBar: { path: '/setup', quarters, teams, ctx, showTeamFilter: false },
+    body: `${pageHead({
+      title: 'Setup',
+      meta: `Reference data for the workspace. Day-to-day planning happens under
+        <a href="${e(viewHref('/census', ctx))}">Census</a>, <a href="${e(viewHref('/capacity', ctx))}">Capacity</a>
+        and <a href="${e(viewHref('/allocations', ctx))}">Allocations</a>.`,
+    })}
+${card({
+  title: 'Quarters',
+  sub: 'Capacity is derived from the working days inside the range',
+  raw: table(`<tr><th>Quarter</th><th>Dates</th><th class="num"></th></tr>`, quarterRows),
+  foot: `<button type="button" class="btn ghost small" data-dialog="dlg-add-quarter">Add quarter…</button>`,
+})}
+${card({
+  title: 'Teams',
+  sub: 'The planning unit is the team-quarter',
+  raw: table(`<tr><th>Team</th><th class="num"></th></tr>`, teamRows),
+  foot: `<button type="button" class="btn ghost small" data-dialog="dlg-add-team">Add team…</button>`,
+})}
+${card({
+  title: 'Holiday calendar',
+  sub: 'Entered deliberately — no jurisdiction is assumed and nothing is fetched',
+  raw: table(`<tr><th>Date</th><th>Name</th><th><span class="sr-only">Actions</span></th></tr>`, holidayRows, '<colgroup><col><col><col class="acts"></colgroup>'),
+  foot: `<button type="button" class="btn ghost small" data-dialog="dlg-add-holiday">Add holiday…</button>`,
+})}
+${
+  quarters.length && teams.length
+    ? card({
+        title: 'Team-quarter detail',
+        sub: 'Optional — everything here is also in the Engineering-wide views',
+        raw: table(
+          `<tr><th>Team</th><th>Quarter</th><th class="num"></th></tr>`,
+          teams
+            .flatMap((t) =>
+              quarters.map(
+                (q) =>
+                  `<tr><td>${e(t.name)}</td><td>${e(q.name)}</td>
+                   <td class="num"><a href="/plan/${t.id}/${q.id}">Open team detail</a></td></tr>`,
+              ),
+            )
+            .join(''),
+        ),
+      })
+    : ''
+}
+${dialogWell(dialogs)}`,
+  });
 }

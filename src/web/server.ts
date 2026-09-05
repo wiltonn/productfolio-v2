@@ -3,6 +3,8 @@ import type { Database } from '../db/database.js';
 import * as repo from '../db/repo.js';
 import { loadEngineeringQuarter } from '../engineering.js';
 import { loadPlan, recordJudgment } from '../plan.js';
+import { findAsset } from './assets.js';
+import { regionsFor } from './regions.js';
 import {
   allocationsPage,
   capacityPage,
@@ -18,7 +20,14 @@ import {
 type Form = Record<string, string>;
 type Query = URLSearchParams;
 type Handler = (ctx: { db: Database; params: string[]; form: Form; query: Query }) => Response;
-type Response = { status: number; html?: string; redirect?: string };
+type Response = {
+  status: number;
+  html?: string;
+  redirect?: string;
+  /** The plain failure message, kept separate from the page that presents it. */
+  message?: string;
+  asset?: { body: string; contentType: string };
+};
 
 const routes: Array<{ method: 'GET' | 'POST'; pattern: RegExp; handler: Handler }> = [];
 const get = (pattern: RegExp, handler: Handler) => routes.push({ method: 'GET', pattern, handler });
@@ -26,8 +35,16 @@ const post = (pattern: RegExp, handler: Handler) => routes.push({ method: 'POST'
 
 const redirect = (to: string): Response => ({ status: 303, redirect: to });
 const page = (html: string): Response => ({ status: 200, html });
-const notFound = (): Response =>
-  ({ status: 404, html: layout('Not found', '<h1>Not found</h1><p><a href="/census">Engineering census</a></p>') });
+const notFound = (): Response => ({
+  status: 404,
+  message: 'Not found',
+  html: layout({
+    title: 'Not found',
+    active: 'setup',
+    ctx: { quarterId: null, teamId: null },
+    body: '<h1>Not found</h1><p><a href="/census">Go to the Engineering census</a></p>',
+  }),
+});
 
 /** Only allow redirects back to pages this app serves. */
 const SAFE_BACK = /^\/(census|capacity|allocations|setup)(\?(q=\d+)?(&?team=\d+)?)?$|^\/plan\/\d+\/\d+$/;
@@ -73,14 +90,14 @@ get(/^\/census$/, ({ db, query }) => {
   const teams = repo.listTeams(db);
   const quarter = ctx.quarterId === null ? null : (repo.getQuarter(db, ctx.quarterId) ?? null);
   const inScope = ctx.teamId === null ? teams : teams.filter((t) => t.id === ctx.teamId);
-  const groups =
+  const plans =
     quarter === null
       ? []
       : inScope.flatMap((team) => {
           const plan = loadPlan(db, team.id, quarter.id);
-          return plan ? [{ team, people: plan.people, capacity: plan.capacity.people }] : [];
+          return plan ? [plan] : [];
         });
-  return page(censusPage({ quarters, teams, quarter, groups, ctx }));
+  return page(censusPage({ quarters, teams, quarter, plans, ctx }));
 });
 
 get(/^\/capacity$/, ({ db, query }) => {
@@ -222,6 +239,12 @@ async function readForm(req: IncomingMessage): Promise<Form> {
 export async function handle(db: Database, req: IncomingMessage): Promise<Response> {
   const method = req.method === 'POST' ? 'POST' : 'GET';
   const url = new URL(req.url ?? '/', 'http://localhost');
+
+  if (method === 'GET') {
+    const asset = findAsset(url.pathname);
+    if (asset) return { status: 200, asset: { body: asset.body, contentType: asset.contentType } };
+  }
+
   for (const route of routes) {
     if (route.method !== method) continue;
     const m = route.pattern.exec(url.pathname);
@@ -231,15 +254,49 @@ export async function handle(db: Database, req: IncomingMessage): Promise<Respon
       return route.handler({ db, params: m.slice(1), form, query: url.searchParams });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { status: 400, html: errorPage(message, backOf(form)) };
+      return { status: 400, message, html: errorPage(message, backOf(form)) };
     }
   }
   return notFound();
 }
 
+/**
+ * A background save posts the very same form to the very same URL; the only difference is
+ * that it asks for JSON. The write has already happened through the same handler, the same
+ * repository call and the same validation, so nothing about the domain is duplicated here —
+ * this only chooses how the outcome is serialized.
+ */
+function asJson(db: Database, out: Response): { status: number; body: string } {
+  if (out.redirect) {
+    const regions = regionsFor(db, out.redirect);
+    return { status: 200, body: JSON.stringify({ ok: true, regions, status: 'Saved.' }) };
+  }
+  const status = out.status === 404 ? 404 : 422;
+  return {
+    status,
+    body: JSON.stringify({ ok: false, message: out.message ?? 'The change could not be saved.' }),
+  };
+}
+
+const wantsJson = (req: IncomingMessage): boolean => (req.headers.accept ?? '').includes('application/json');
+
 export function startServer(db: Database, port: number, host = '127.0.0.1') {
   const server = createServer(async (req, res: ServerResponse) => {
     const out = await handle(db, req);
+
+    if (out.asset) {
+      res.writeHead(200, { 'Content-Type': out.asset.contentType, 'Cache-Control': 'public, max-age=31536000, immutable' });
+      res.end(out.asset.body);
+      return;
+    }
+
+    if (wantsJson(req)) {
+      const json = asJson(db, out);
+      res.writeHead(json.status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(json.body);
+      return;
+    }
+
     if (out.redirect) {
       res.writeHead(out.status, { Location: out.redirect });
       res.end();
