@@ -83,6 +83,12 @@ business ambiguities that block a coherent model do.
   `src/engineering.ts` is the Engineering-wide read model over those plans; `src/web/`
   renders and routes; `src/seed.ts` loads the synthetic examples; `test/` mirrors the
   domain examples.
+- **Interface:** `src/web/styles.ts` holds every design token and component style and
+  `src/web/ui.ts` the components built from them; pages compose those and never carry their
+  own styling. `src/web/client.ts` is the only client-side script — it enhances forms the
+  server already renders and must never compute a planning figure. A background save posts
+  the same form to the same URL asking for JSON, and `src/web/regions.ts` re-renders the
+  named regions of the page it came from, so every figure on screen stays the server's own.
 - **Commands:** `npm start` (serve on port 3000), `npm run seed` (adds any missing synthetic
   team — idempotent, never destructive, never requires deleting the database),
   `npm test`, `npm run typecheck`. The database lives at `data/planning.db` (gitignored;

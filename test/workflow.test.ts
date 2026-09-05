@@ -356,8 +356,8 @@ describe('HTTP interface', () => {
   it('serves the team-quarter detail page with the capacity chain', async () => {
     const plan = await fetch(`${base}/plan/${teamId}/${quarterId}`);
     const html = await plan.text();
-    assert.match(html, /Net delivery capacity/);
-    assert.match(html, /61\.0 ew/);
+    assert.match(html, /Net delivery/);
+    assert.match(html, /61\.0/);
     assert.match(html, /7\.9%/);
     assert.match(html, /synthetic example data/i);
   });
@@ -383,7 +383,8 @@ describe('HTTP interface', () => {
     const search = loadPlan(db, teamId, quarterId)!.workPackages.find((w) => w.name === 'Search relevance tuning')!;
     await post(`/work-packages/${search.id}/assignment`, { team_id: String(teamId), engineer_weeks: '10', back: `/plan/${teamId}/${quarterId}` });
     const html = await (await fetch(`${base}/plan/${teamId}/${quarterId}`)).text();
-    assert.match(html, /SHORTFALL/);
+    assert.match(html, /Overallocated by/i, 'the shortfall is stated, not adjusted away');
+    assert.match(html, /Shortfall/);
     await post(`/work-packages/${search.id}/assignment`, { team_id: String(teamId), engineer_weeks: '0', back: `/plan/${teamId}/${quarterId}` });
   });
 
@@ -408,7 +409,7 @@ describe('HTTP interface', () => {
     });
     assert.equal(r.headers.get('location'), `/allocations?q=${quarterId}`);
     const html = await (await fetch(`${base}/allocations?q=${quarterId}`)).text();
-    assert.match(html, /judgment needs reassessment/);
+    assert.match(html, /Needs reassessment/);
     assert.match(html, /reserve changed 9\.0 → 6\.0 ew/);
     await post('/reserve', { team_id: String(teamId), quarter_id: String(quarterId), engineer_weeks: '9', back: `/allocations?q=${quarterId}` });
   });
@@ -463,27 +464,29 @@ describe('Engineering-wide views (HTTP)', () => {
   it('census lists everyone in Engineering, grouped by team, without opening a team', async () => {
     const html = await text(`/census?q=${quarterId}`);
     for (const name of ['Lena (lead)', 'Priya', 'Marta', 'Ana (lead)', 'Bo', 'Cass']) assert.match(html, new RegExp(name.replace(/[()]/g, '\\$&')));
-    assert.match(html, /Team Atlas \(synthetic example\) — 6 people/);
-    assert.match(html, /Team Beacon \(synthetic example\) — 3 people/);
+    assert.match(html, /Team Atlas \(synthetic example\)<\/h2>/, 'each team is its own group');
+    assert.match(html, /Team Beacon \(synthetic example\)<\/h2>/);
+    assert.match(html, /6 people/);
+    assert.match(html, /3 people/);
   });
 
   it('census filters by team on request, and the filter is optional', async () => {
     const filtered = await text(`/census?q=${quarterId}&team=${beaconTeamId}`);
     assert.match(filtered, /Ana \(lead\)/);
-    assert.doesNotMatch(filtered, /<strong>Lena \(lead\)<\/strong>/);
+    assert.doesNotMatch(filtered, /class="name">Lena \(lead\)</);
     const all = await text(`/census?q=${quarterId}`);
-    assert.match(all, /<strong>Lena \(lead\)<\/strong>/);
+    assert.match(all, /class="name">Lena \(lead\)</);
   });
 
   it('capacity shows the Engineering chain and a per-team breakdown', async () => {
     const html = await text(`/capacity?q=${quarterId}`);
     assert.match(html, /Engineering-wide capacity chain/);
-    assert.match(html, /102\.6 ew/); // contracted
-    assert.match(html, /98\.8 ew/); // available
-    assert.match(html, /87\.1 ew/); // net delivery
+    assert.match(html, /102\.6/); // contracted
+    assert.match(html, /98\.8/); // available
+    assert.match(html, /87\.1/); // net delivery
     assert.match(html, /11\.8%/); // overhead ratio from summed quantities
     assert.match(html, /Per-team breakdown/);
-    assert.match(html, /summed, not an average of team ratios/);
+    assert.match(html, /summed, not the mean of the team ratios/);
   });
 
   it('allocations shows every team’s work, reconciliation and the Engineering mix', async () => {
@@ -498,16 +501,16 @@ describe('Engineering-wide views (HTTP)', () => {
 
   it('shows Beacon’s shortfall explicitly even though Engineering has headroom', async () => {
     const html = await text(`/allocations?q=${quarterId}`);
-    assert.match(html, /SHORTFALL 2\.9/);
-    assert.match(html, /2\.9 ew of shortfall stands in 1 team/);
-    assert.match(html, /capacity belongs to a team and is not interchangeable/);
-    assert.match(html, /4\.0 ew<\/span><\/th>\s*<td class="muted">held by 1 team/);
+    assert.match(html, /2\.9 ew short/, 'Beacon’s shortfall is stated as a shortfall');
+    assert.match(html, /2\.9 ew of shortfall stands in Team Beacon \(synthetic example\)/, 'the overallocated team is named');
+    assert.match(html, /its people are not interchangeable/);
+    assert.match(html, /held by 1 team/, 'headroom is reported separately from the shortfall');
   });
 
   it('lists every team’s reconciliation even when the view is filtered to one team', async () => {
     const html = await text(`/allocations?q=${quarterId}&team=${teamId}`);
-    assert.match(html, /SHORTFALL 2\.9/, 'Beacon’s shortfall stays visible while filtered to Atlas');
-    assert.match(html, /never hidden by filtering/);
+    assert.match(html, /2\.9 ew short/, 'Beacon’s shortfall stays visible while filtered to Atlas');
+    assert.match(html, /a shortfall is never hidden/);
   });
 
   it('accepts work onto a named team from the allocations view', async () => {
@@ -536,11 +539,11 @@ describe('Engineering-wide views (HTTP)', () => {
     const allocations = await text(`/allocations?q=${second}`);
     assert.match(allocations, /Q2 2027 \(synthetic\)/);
     assert.match(allocations, new RegExp(`href="/capacity\\?q=${second}"`));
-    assert.match(allocations, /No work accepted for this team/);
+    assert.match(allocations, /No work has been accepted for this team/);
   });
 
   it('an unknown quarter falls back to a real one rather than erroring', async () => {
     const html = await text('/capacity?q=999999');
-    assert.match(html, /Engineering capacity —/);
+    assert.match(html, /Engineering capacity/);
   });
 });
