@@ -2,7 +2,14 @@
 
 ## Status
 
-**Domain investigation — not settled.**
+**Deferred-scope investigation note — not active.**
+
+The first release is an Engineering quarterly-planning system (`OPEN_DECISIONS.md` D6);
+product/capability catalogs are deferred. This document imposes no requirement on the first
+release and is subordinate to the active documents listed in `README.md`. The boundaries it
+insists on — organizational ownership ≠ capability ownership ≠ work dependency — are already
+preserved as expansion safeguards in `ORGANIZATION_MODEL.md`, and work-to-work dependency
+in the first release is defined in `WORK_MODEL.md`.
 
 This document exists to investigate durable reusable capabilities, their ownership, and the work or organizations that depend on them.
 

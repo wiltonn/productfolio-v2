@@ -1,0 +1,21 @@
+{
+  "name": "productfolio-v2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Engineering quarterly-planning system — first slice: one team, one quarter",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning --import tsx src/main.ts",
+    "seed": "node --no-warnings=ExperimentalWarning --import tsx src/seed.ts",
+    "test": "node --no-warnings=ExperimentalWarning --import tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

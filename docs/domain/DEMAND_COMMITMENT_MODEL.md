@@ -2,7 +2,17 @@
 
 ## Status
 
-**Domain investigation — not settled.**
+**Deferred-scope investigation note — not active.**
+
+The first release is an Engineering quarterly-planning system (`OPEN_DECISIONS.md` D6);
+enterprise-wide commercial request negotiation is deferred. This document imposes no
+requirement on the first release and is subordinate to the active documents listed in
+`README.md`. Several questions below were answered pre-reset by D5 (Need and WorkPackage are
+separate and many-to-many; a Commitment is its own record, never inferred from an
+assignment; a commitment may cover part of a request); those answers are deferred with the
+scope, not reopened, and the full pre-reset text is at git tag
+`checkpoint/pre-engineering-quarterly-reset`. The quarterly commitment that *is* in scope
+lives in `QUARTERLY_PLANNING_MODEL.md`.
 
 This document exists to investigate how Commercial Division needs become Product priorities, agreements and delivery commitments.
 
