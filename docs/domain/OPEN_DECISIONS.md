@@ -130,6 +130,20 @@ at judgment time, which silently reactivated a judgment when an equal-capacity r
 was added for an absent specialist the lead had relied on. Home:
 `QUARTERLY_PLANNING_MODEL.md`.
 
+### D16 — Engineering-wide workspace over the team-quarter planning unit — **DECIDED** (product owner)
+Census, Capacity and Allocations are top-level Engineering-wide views: no team need be opened
+to reach them, Capacity and Allocations share one quarter selection, and team filtering and
+team-level detail are optional. The workspace is a **read model** — the team-quarter remains
+the planning unit and keeps ownership of assignments, the reserve, the reconciliation identity
+and feasibility reassessment — so every edit made from a workspace view is applied to a named
+team-quarter that the interface identifies. Engineering totals follow two rules: aggregate
+percentages come from summed quantities (never from averaging team percentages), and headroom
+and shortfall are reported separately, so a team's shortfall stays visible even when
+Engineering's residual is positive and even when the view is filtered elsewhere. Explicitly
+**not** introduced: organizational layers, multi-team WorkPackages, forecasting, individual
+scheduling. Worked examples X9 and X10. Home: `QUARTERLY_PLANNING_MODEL.md`, "The planning
+unit and the workspace".
+
 ---
 
 ## Open decisions

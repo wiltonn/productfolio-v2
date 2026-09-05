@@ -79,15 +79,22 @@ business ambiguities that block a coherent model do.
   client-side bundle for this slice.
 - **Layout:** `src/domain/` holds pure arithmetic with no I/O (`calendar.ts`,
   `capacity.ts`, `planning.ts`); `src/db/` holds the schema and repository; `src/plan.ts`
-  assembles a team-quarter; `src/web/` renders and routes; `src/seed.ts` loads the
-  synthetic example; `test/` mirrors the domain examples.
-- **Commands:** `npm start` (serve on port 3000), `npm run seed` (synthetic Team Atlas),
+  assembles one team-quarter and is the only path that records judgments;
+  `src/engineering.ts` is the Engineering-wide read model over those plans; `src/web/`
+  renders and routes; `src/seed.ts` loads the synthetic examples; `test/` mirrors the
+  domain examples.
+- **Commands:** `npm start` (serve on port 3000), `npm run seed` (adds any missing synthetic
+  team — idempotent, never destructive, never requires deleting the database),
   `npm test`, `npm run typecheck`. The database lives at `data/planning.db` (gitignored;
   override with `PRODUCTFOLIO_DB`).
 - **Rules of the code:** the domain layer must reproduce `docs/domain/DOMAIN_EXAMPLES.md`
   exactly and the tests assert it; every displayed quantity states its unit
   (engineer-weeks) and every percentage its denominator; arithmetic flags shortfalls and
   staleness but never confers feasibility; synthetic data is labelled synthetic.
+- **Workspace vs planning unit (D16):** Census, Capacity and Allocations are Engineering-wide
+  views over team-quarters. They read and total; they never own state, pool capacity, or
+  edit without naming the team affected. Engineering percentages come from summed
+  quantities, and a team's shortfall is never offset by another team's headroom.
 
 ---
 

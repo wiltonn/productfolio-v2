@@ -344,25 +344,39 @@ describe('HTTP interface', () => {
   const post = (path: string, form: Record<string, string>) =>
     fetch(base + path, { method: 'POST', body: new URLSearchParams(form), redirect: 'manual' });
 
-  it('serves the home page and the plan page with the capacity chain', async () => {
-    const home = await fetch(base + '/');
+  it('the root lands on an Engineering-wide view without opening a team', async () => {
+    const home = await fetch(base + '/'); // follows the redirect
     assert.equal(home.status, 200);
-    assert.match(await home.text(), /Team Atlas \(synthetic example\)/);
+    const html = await home.text();
+    assert.match(html, /Engineering capacity/);
+    assert.match(html, /Team Atlas \(synthetic example\)/);
+    assert.match(html, /Team Beacon \(synthetic example\)/);
+  });
 
+  it('serves the team-quarter detail page with the capacity chain', async () => {
     const plan = await fetch(`${base}/plan/${teamId}/${quarterId}`);
     const html = await plan.text();
     assert.match(html, /Net delivery capacity/);
     assert.match(html, /61\.0 ew/);
     assert.match(html, /7\.9%/);
-    assert.match(html, /Synthetic example data/);
+    assert.match(html, /synthetic example data/i);
   });
 
-  it('adds a person through the form and reflects the new capacity', async () => {
-    const r = await post(`/plan/${teamId}/${quarterId}/people`, { name: 'Sam (synthetic)', fraction: '0.5', joined: '2027-03-01', left: '' });
+  it('adds a person through the census form, naming the team, and reflects the new capacity', async () => {
+    const r = await post('/people', {
+      team_id: String(teamId),
+      name: 'Sam (synthetic)',
+      fraction: '0.5',
+      joined: '2027-03-01',
+      left: '',
+      back: `/census?q=${quarterId}`,
+    });
     assert.equal(r.status, 303);
-    const html = await (await fetch(`${base}/plan/${teamId}/${quarterId}`)).text();
+    assert.equal(r.headers.get('location'), `/census?q=${quarterId}`);
+    const html = await (await fetch(`${base}/census?q=${quarterId}`)).text();
     assert.match(html, /Sam \(synthetic\)/);
     close(loadPlan(db, teamId, quarterId)!.capacity.contractedEw, 68.8 + 2.5); // 25 days × 0.5 / 5
+    repo.deletePerson(db, repo.listPeople(db, teamId, quarterId).find((p) => p.name === 'Sam (synthetic)')!.id);
   });
 
   it('shows the shortfall when an assignment overallocates the team', async () => {
@@ -385,21 +399,148 @@ describe('HTTP interface', () => {
     assert.match(await r.text(), /no capacity is assigned/);
   });
 
-  it('shows why a judgment needs reassessment after the reserve changes', async () => {
-    await post(`/plan/${teamId}/${quarterId}/reserve`, { engineer_weeks: '6' });
-    const html = await (await fetch(`${base}/plan/${teamId}/${quarterId}`)).text();
+  it('sets a reserve from the allocations view and shows why judgments need reassessment', async () => {
+    const r = await post('/reserve', {
+      team_id: String(teamId),
+      quarter_id: String(quarterId),
+      engineer_weeks: '6',
+      back: `/allocations?q=${quarterId}`,
+    });
+    assert.equal(r.headers.get('location'), `/allocations?q=${quarterId}`);
+    const html = await (await fetch(`${base}/allocations?q=${quarterId}`)).text();
     assert.match(html, /judgment needs reassessment/);
     assert.match(html, /reserve changed 9\.0 → 6\.0 ew/);
-    await post(`/plan/${teamId}/${quarterId}/reserve`, { engineer_weeks: '9' });
+    await post('/reserve', { team_id: String(teamId), quarter_id: String(quarterId), engineer_weeks: '9', back: `/allocations?q=${quarterId}` });
   });
 
   it('returns a 400 error page for invalid input', async () => {
-    const r = await post(`/plan/${teamId}/${quarterId}/people`, { name: 'Nope', fraction: '2' });
+    const r = await post('/people', { team_id: String(teamId), name: 'Nope', fraction: '2' });
     assert.equal(r.status, 400);
     assert.match(await r.text(), /fraction/);
   });
 
+  it('ignores an off-site back parameter rather than redirecting to it', async () => {
+    const r = await post('/reserve', {
+      team_id: String(teamId),
+      quarter_id: String(quarterId),
+      engineer_weeks: '9',
+      back: 'https://example.com/phish',
+    });
+    assert.equal(r.headers.get('location'), '/census');
+  });
+
   it('404s for an unknown plan', async () => {
     assert.equal((await fetch(`${base}/plan/999/999`)).status, 404);
+  });
+});
+
+/**
+ * The Engineering-wide workspace: Census, Capacity and Allocations reachable without opening
+ * a team, over two synthetic teams where one is overallocated and Engineering is not.
+ */
+describe('Engineering-wide views (HTTP)', () => {
+  let db: Database;
+  let base: string;
+  let server: ReturnType<typeof startServer>;
+  let teamId: number;
+  let beaconTeamId: number;
+  let quarterId: number;
+
+  before(async () => {
+    db = openDatabase(':memory:');
+    ({ teamId, beaconTeamId, quarterId } = seedSyntheticExample(db));
+    server = startServer(db, 0);
+    await new Promise<void>((r) => server.once('listening', () => r()));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  after(() => server.close());
+
+  const text = async (path: string) => (await fetch(base + path)).text();
+  const post = (path: string, form: Record<string, string>) =>
+    fetch(base + path, { method: 'POST', body: new URLSearchParams(form), redirect: 'manual' });
+
+  it('census lists everyone in Engineering, grouped by team, without opening a team', async () => {
+    const html = await text(`/census?q=${quarterId}`);
+    for (const name of ['Lena (lead)', 'Priya', 'Marta', 'Ana (lead)', 'Bo', 'Cass']) assert.match(html, new RegExp(name.replace(/[()]/g, '\\$&')));
+    assert.match(html, /Team Atlas \(synthetic example\) — 6 people/);
+    assert.match(html, /Team Beacon \(synthetic example\) — 3 people/);
+  });
+
+  it('census filters by team on request, and the filter is optional', async () => {
+    const filtered = await text(`/census?q=${quarterId}&team=${beaconTeamId}`);
+    assert.match(filtered, /Ana \(lead\)/);
+    assert.doesNotMatch(filtered, /<strong>Lena \(lead\)<\/strong>/);
+    const all = await text(`/census?q=${quarterId}`);
+    assert.match(all, /<strong>Lena \(lead\)<\/strong>/);
+  });
+
+  it('capacity shows the Engineering chain and a per-team breakdown', async () => {
+    const html = await text(`/capacity?q=${quarterId}`);
+    assert.match(html, /Engineering-wide capacity chain/);
+    assert.match(html, /102\.6 ew/); // contracted
+    assert.match(html, /98\.8 ew/); // available
+    assert.match(html, /87\.1 ew/); // net delivery
+    assert.match(html, /11\.8%/); // overhead ratio from summed quantities
+    assert.match(html, /Per-team breakdown/);
+    assert.match(html, /summed, not an average of team ratios/);
+  });
+
+  it('allocations shows every team’s work, reconciliation and the Engineering mix', async () => {
+    const html = await text(`/allocations?q=${quarterId}`);
+    assert.match(html, /Payments reconciliation service/);
+    assert.match(html, /Ledger export hardening/);
+    assert.match(html, /Vendor SDK upgrade/);
+    assert.match(html, /Engineering-wide reconciliation/);
+    assert.match(html, /Delivery investment mix/);
+    assert.match(html, /% of Engineering net delivery capacity \(87\.1 ew\)/);
+  });
+
+  it('shows Beacon’s shortfall explicitly even though Engineering has headroom', async () => {
+    const html = await text(`/allocations?q=${quarterId}`);
+    assert.match(html, /SHORTFALL 2\.9/);
+    assert.match(html, /2\.9 ew of shortfall stands in 1 team/);
+    assert.match(html, /capacity belongs to a team and is not interchangeable/);
+    assert.match(html, /4\.0 ew<\/span><\/th>\s*<td class="muted">held by 1 team/);
+  });
+
+  it('lists every team’s reconciliation even when the view is filtered to one team', async () => {
+    const html = await text(`/allocations?q=${quarterId}&team=${teamId}`);
+    assert.match(html, /SHORTFALL 2\.9/, 'Beacon’s shortfall stays visible while filtered to Atlas');
+    assert.match(html, /never hidden by filtering/);
+  });
+
+  it('accepts work onto a named team from the allocations view', async () => {
+    const r = await post('/work-packages', {
+      team_id: String(beaconTeamId),
+      quarter_id: String(quarterId),
+      name: 'Alerting cleanup (synthetic)',
+      category: 'Tech Debt',
+      estimate_ew: '2',
+      notes: '',
+      back: `/allocations?q=${quarterId}`,
+    });
+    assert.equal(r.status, 303);
+    const html = await text(`/allocations?q=${quarterId}`);
+    assert.match(html, /Alerting cleanup \(synthetic\)/);
+    const added = loadPlan(db, beaconTeamId, quarterId)!.workPackages.find((w) => w.name === 'Alerting cleanup (synthetic)')!;
+    assert.equal(added.teamId, beaconTeamId, 'work is owned by the team it was accepted for');
+    repo.deleteWorkPackage(db, added.id);
+  });
+
+  it('the quarter selection is shared by capacity and allocations', async () => {
+    const second = repo.createQuarter(db, { name: 'Q2 2027 (synthetic)', start: '2027-04-05', end: '2027-07-02' });
+    const capacity = await text(`/capacity?q=${second}`);
+    assert.match(capacity, /Q2 2027 \(synthetic\)/);
+    assert.match(capacity, new RegExp(`href="/allocations\\?q=${second}"`), 'the nav carries the selected quarter across views');
+    const allocations = await text(`/allocations?q=${second}`);
+    assert.match(allocations, /Q2 2027 \(synthetic\)/);
+    assert.match(allocations, new RegExp(`href="/capacity\\?q=${second}"`));
+    assert.match(allocations, /No work accepted for this team/);
+  });
+
+  it('an unknown quarter falls back to a real one rather than erroring', async () => {
+    const html = await text('/capacity?q=999999');
+    assert.match(html, /Engineering capacity —/);
   });
 });

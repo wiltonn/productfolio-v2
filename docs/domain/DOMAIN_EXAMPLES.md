@@ -168,3 +168,58 @@ Rob's absent days stay at 10, not 11.
 The holiday reduces available capacity for everyone in force, at their own scheduled
 fraction, and a day covered by both a holiday and leave is absent exactly once (D13). Had
 the holiday fallen on a Saturday it would have changed nothing.
+
+---
+
+The last two examples are Engineering-wide (D16). They use **Team Atlas** from X1 alongside a
+second team, **Team Beacon**: Ana (lead, full-time, 50% overhead), Bo (full-time, 6 working
+days' leave) and Cass (0.6 part-time), in the same quarter.
+
+```
+Beacon   contracted 33.8 − absence 1.2 = available 32.6 − overhead 6.5 = net delivery 26.1
+```
+
+Both teams are reproduced by the synthetic seed (`npm run seed`) and asserted by `test/`.
+
+## X9 — One team is overallocated while Engineering still has headroom
+
+| Team | Net delivery | Assigned | Reserve | Headroom / shortfall |
+|---|---|---|---|---|
+| Atlas | 61.0 | 48.0 | 9.0 | **+4.0 headroom** |
+| Beacon | 26.1 | 23.0 | 6.0 | **2.9 shortfall** |
+| **Engineering** | **87.1** | **71.0** | **15.0** | **4.0 headroom *and* 2.9 shortfall** |
+
+The arithmetic residual across Engineering is `4.0 − 2.9 = +1.1` ew, and reporting that
+single figure would say the quarter fits. It does not: Beacon is overallocated by 2.9 ew and
+Atlas's 4.0 ew cannot be spent on Beacon's work, because capacity belongs to a team and its
+people are not interchangeable.
+
+So the Engineering view reports the two quantities **separately** — headroom held by one
+team, shortfall standing in another — carries an explicit warning naming the overallocated
+team, and shows the residual only as a labelled bookkeeping figure. Beacon's shortfall
+remains visible even when the view is filtered to Atlas, and it is resolved only in Beacon's
+own reconciliation: reduce Beacon's assignments, reduce its reserve deliberately, or revisit
+what Beacon accepted.
+
+Moving work between the teams is a planning decision a lead makes and records — never
+something the totals imply has already happened.
+
+## X10 — Aggregate percentages come from summed quantities
+
+Overhead ratios for the same quarter:
+
+```
+Atlas         5.2 ÷ 66.2 =  7.9%
+Beacon        6.5 ÷ 32.6 = 19.9%
+
+Engineering  11.7 ÷ 98.8 = 11.8%      ← summed quantities  (correct)
+mean of the two team ratios = 13.9%    ← averaged percentages (wrong)
+```
+
+The average is wrong by two percentage points because it weighs Beacon's three people as
+heavily as Atlas's six. The same rule governs the investment mix: Engineering's Tech Debt
+share is `19.0 ÷ 87.1 = 21.8%` — summed engineer-weeks over summed net delivery capacity —
+not the mean of the teams' Tech Debt percentages.
+
+Every percentage states its denominator, so a reader can always see which population it
+describes (D8, D16).
