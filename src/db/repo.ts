@@ -287,14 +287,19 @@ export function deleteAbsence(db: Database, absenceId: number): void {
   logForQuarters(db, p.team_id, quartersIntersecting(db, row.from_date, row.to_date), `absence removed for ${p.name}: ${row.from_date} → ${row.to_date}`);
 }
 
+/**
+ * Sets the overhead percentage, and the note only when one is supplied. A caller that
+ * changes the percentage alone — the inline editor does — must not silently discard the
+ * recorded reason for it; omitting `note` keeps whatever is stored.
+ */
 export function setOverhead(db: Database, input: { personId: number; quarterId: number; percent: string | number; note?: string }): void {
   const p = requirePerson(db, input.personId);
   const percent = requireNumber(input.percent, 'Overhead percent');
   validateOverheadPercent(percent);
-  const note = (input.note ?? '').trim();
-  const before = db.prepare('SELECT percent FROM overhead WHERE person_id = ? AND quarter_id = ?').get(input.personId, input.quarterId) as
-    | { percent: number }
-    | undefined;
+  const before = db
+    .prepare('SELECT percent, note FROM overhead WHERE person_id = ? AND quarter_id = ?')
+    .get(input.personId, input.quarterId) as { percent: number; note: string } | undefined;
+  const note = input.note === undefined ? (before?.note ?? '') : input.note.trim();
   db.prepare(
     `INSERT INTO overhead (person_id, quarter_id, percent, note) VALUES (?, ?, ?, ?)
      ON CONFLICT (person_id, quarter_id) DO UPDATE SET percent = excluded.percent, note = excluded.note`,

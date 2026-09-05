@@ -178,7 +178,14 @@ post(/^\/absences\/(\d+)\/delete$/, ({ db, params, form }) => {
 });
 
 post(/^\/people\/(\d+)\/overhead$/, ({ db, params, form }) => {
-  repo.setOverhead(db, { personId: int(params[0]), quarterId: int(form.quarter_id), percent: form.percent ?? '', note: form.note ?? '' });
+  // `note` is passed through only when the form carries one: the inline percentage editor
+  // does not, and must not wipe the recorded reason for the overhead.
+  repo.setOverhead(db, {
+    personId: int(params[0]),
+    quarterId: int(form.quarter_id),
+    percent: form.percent ?? '',
+    ...(form.note !== undefined ? { note: form.note } : {}),
+  });
   return redirect(backOf(form));
 });
 

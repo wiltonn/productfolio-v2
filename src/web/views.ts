@@ -107,6 +107,7 @@ const inForceText = (p: PersonRecord): string =>
 
 function personMenu(p: PersonRecord): string {
   const items: MenuItem[] = [
+    { label: 'Edit overhead and its note…', dialog: `dlg-overhead-${p.id}` },
     { label: 'Change working schedule…', dialog: `dlg-schedule-${p.id}` },
     { label: 'Add absence…', dialog: `dlg-absence-${p.id}` },
   ];
@@ -189,6 +190,26 @@ function personDialogs(plan: TeamQuarterPlan, back: string): string[] {
 
   for (const p of plan.people) {
     const cap = plan.capacity.people.find((c) => c.personId === p.id)!;
+
+    out.push(
+      dialog({
+        id: `dlg-overhead-${p.id}`,
+        title: `Edit ${p.name}'s overhead`,
+        scope: `${quarterScope} · a share of their own available capacity, ${ew(cap.availableEw)} ew`,
+        action: `/people/${p.id}/overhead`,
+        hidden: { back, quarter_id: plan.quarter.id },
+        label: `overhead for ${p.name}`,
+        submitLabel: 'Save overhead',
+        body: `${field(
+          'Overhead',
+          `<input type="number" name="percent" value="${p.overheadPercent}" step="1" min="0" max="100" required>`,
+          'percent of available capacity',
+        )}
+      ${field('Note', `<input type="text" name="note" value="${e(p.overheadNote)}" placeholder="e.g. team lead: management &amp; admin">`, 'what the overhead is for')}
+      <p>Overhead is netted out of available capacity and reported separately, with its ratio. It is never spread
+        across the delivery investment categories.</p>`,
+      }),
+    );
 
     out.push(
       dialog({

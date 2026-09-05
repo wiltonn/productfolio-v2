@@ -348,3 +348,65 @@ describe('background saves and feasibility reassessment', () => {
     assert.equal(payments().assessment.needsReassessment, true);
   });
 });
+
+/**
+ * Changing the overhead percentage used to erase the note recorded alongside it, because
+ * the form carried no note and the write stored an empty one regardless.
+ */
+describe('overhead notes survive a change to the percentage', () => {
+  let db: Database;
+  let server: ReturnType<typeof startServer>;
+  let base: string;
+  let teamId: number;
+  let quarterId: number;
+
+  before(async () => {
+    db = openDatabase(':memory:');
+    ({ teamId, quarterId } = seedSyntheticExample(db));
+    server = startServer(db, 0);
+    await new Promise<void>((r) => server.once('listening', () => r()));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  after(() => server.close());
+
+  const lena = () => repo.listPeople(db, teamId, quarterId).find((p) => p.name === 'Lena (lead)')!;
+
+  const post = (path: string, form: Record<string, string>) =>
+    fetch(base + path, { method: 'POST', body: new URLSearchParams(form), redirect: 'manual' });
+
+  it('the seeded note is there to begin with', () => {
+    assert.equal(lena().overheadNote, 'team lead: management & admin');
+  });
+
+  it('setting the percentage alone keeps the note', async () => {
+    await post(`/people/${lena().id}/overhead`, { back: `/census?q=${quarterId}`, quarter_id: String(quarterId), percent: '45' });
+    assert.equal(lena().overheadPercent, 45);
+    assert.equal(lena().overheadNote, 'team lead: management & admin');
+  });
+
+  it('sending a note replaces it, and sending an empty one clears it deliberately', async () => {
+    await post(`/people/${lena().id}/overhead`, {
+      back: `/census?q=${quarterId}`,
+      quarter_id: String(quarterId),
+      percent: '45',
+      note: 'lead: hiring and on-call rota',
+    });
+    assert.equal(lena().overheadNote, 'lead: hiring and on-call rota');
+
+    await post(`/people/${lena().id}/overhead`, {
+      back: `/census?q=${quarterId}`,
+      quarter_id: String(quarterId),
+      percent: '45',
+      note: '',
+    });
+    assert.equal(lena().overheadNote, '');
+  });
+
+  it('the census offers a dialog that edits the percentage and the note together', async () => {
+    const html = await (await fetch(`${base}/census?q=${quarterId}`)).text();
+    assert.match(html, new RegExp(`id="dlg-overhead-${lena().id}"`));
+    assert.match(html, /Edit overhead and its note…/);
+    assert.match(html, /name="note"/);
+  });
+});
