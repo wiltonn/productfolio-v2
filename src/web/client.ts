@@ -31,6 +31,7 @@ export const APP_JS = String.raw`
   'use strict';
 
   var SAVED_FLASH_MS = 1600;
+  var DRAFT_PREFIX = 'productfolio:drafts:';
 
   /* ------------------------------------------------------------ the mutation queue */
 
@@ -403,6 +404,93 @@ export const APP_JS = String.raw`
     }, 0);
   });
 
+  /* ------------------------------------------------------------ unsaved drafts */
+
+  function draftKey(url) {
+    var target = new URL(url, window.location.href);
+    return DRAFT_PREFIX + target.pathname + target.search;
+  }
+
+  /** Editors holding something that is not saved and not on its way to being saved. */
+  function collectDrafts() {
+    var drafts = [];
+    document.querySelectorAll('.cell.editing, .cell.failed').forEach(function (cell) {
+      var input = cell.querySelector('[data-input]');
+      if (!input) return;
+      var failed = cell.classList.contains('failed');
+      if (!failed && unchanged(cell, input.value)) return; // an open editor nobody typed in
+      var box = cell.parentNode.querySelector('.errbox');
+      drafts.push({
+        field: cell.getAttribute('data-field'),
+        value: input.value,
+        error: box ? box.getAttribute('data-message') : null
+      });
+    });
+    return drafts;
+  }
+
+  function stashDrafts(url, drafts) {
+    try {
+      window.sessionStorage.setItem(draftKey(url), JSON.stringify(drafts));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function takeStashedDrafts() {
+    try {
+      var key = draftKey(window.location.href);
+      var raw = window.sessionStorage.getItem(key);
+      if (!raw) return [];
+      window.sessionStorage.removeItem(key);
+      return JSON.parse(raw) || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
+   * Adding or removing a person, an absence or a work package changes what the page
+   * contains, not just what its figures say, so the page is loaded afresh. Anything typed
+   * elsewhere and not yet saved travels across that refresh; if it cannot be carried, the
+   * planner is asked before it is dropped.
+   */
+  function refreshKeepingDrafts(url) {
+    var drafts = collectDrafts();
+    if (drafts.length && !stashDrafts(url, drafts)) {
+      var warning =
+        drafts.length === 1
+          ? 'One edit has not been saved and cannot be carried across the refresh. Discard it?'
+          : drafts.length + ' edits have not been saved and cannot be carried across the refresh. Discard them?';
+      if (!window.confirm(warning)) {
+        live('The page was not refreshed; your unsaved edits are still here.');
+        return;
+      }
+    }
+    reloading = true;
+    window.location.assign(url);
+  }
+
+  function restoreStashedDrafts() {
+    var drafts = takeStashedDrafts();
+    if (!drafts.length) return;
+    var restored = 0;
+    drafts.forEach(function (draft) {
+      var cell = document.querySelector('.cell[data-field="' + cssEscape(draft.field) + '"]');
+      if (!cell) return;
+      restored += 1;
+      openEditor(cell, draft.value, false);
+      if (draft.error) showCellError(cell, draft.error, false);
+    });
+    if (!restored) return;
+    setSaveBar(failedHtml());
+    live(
+      (restored === 1 ? 'One unsaved edit was' : restored + ' unsaved edits were') +
+        ' kept while the page refreshed. They are still not saved.'
+    );
+  }
+
   /* ------------------------------------------------------------ dialogs */
 
   var lastTrigger = null;
@@ -474,10 +562,7 @@ export const APP_JS = String.raw`
       onSuccess: function () {
         submitButtons.forEach(function (b) { b.disabled = false; });
         closeDialog(dialog);
-        whenDrained(function () {
-          reloading = true;
-          window.location.assign(target);
-        });
+        whenDrained(function () { refreshKeepingDrafts(target); });
       },
       onError: function (message) {
         submitButtons.forEach(function (b) { b.disabled = false; });
@@ -555,10 +640,13 @@ export const APP_JS = String.raw`
     return '';
   });
 
+  restoreStashedDrafts();
+
   // Exposed for the browser regression tests, which need to know when the queue is idle.
   window.__productfolio = {
     pending: pendingCount,
-    settling: function () { return Object.keys(settling); }
+    settling: function () { return Object.keys(settling); },
+    drafts: collectDrafts
   };
 })();
 `;
