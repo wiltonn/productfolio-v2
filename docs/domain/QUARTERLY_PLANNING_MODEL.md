@@ -4,9 +4,10 @@ How team capacity is assigned to accepted work, reconciled, judged feasible, and
 This document is the authoritative home of the reconciliation identity, the Unplanned Work
 reserve, the planning states, feasibility, commitments, baselines and reports.
 
-Status: **active** for the first-release scope (revised 2026-09-05). This file replaces the
-enterprise-scope `DEMAND_COMMITMENT_MODEL.md`, whose Need/priority content is deferred (see
-`OPEN_DECISIONS.md` D5, D6).
+Status: **active** for the first-release scope (revised 2026-09-05). This file replaced the
+pre-reset enterprise-scope `DEMAND_COMMITMENT_MODEL.md`, whose Need/priority content is
+deferred (see `OPEN_DECISIONS.md` D5, D6). The `DEMAND_COMMITMENT_MODEL.md` now on disk is a
+deferred-scope investigation note, not an active document (see `README.md`).
 
 ---
 

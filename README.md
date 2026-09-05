@@ -21,17 +21,31 @@ The planning unit is the **team-quarter**, not the employee-week. Selective deta
 only for constrained specialists and for rough monthly sequencing where dependencies or
 delivery windows require it.
 
+## What it is not
+
+ProductFolio is not intended to become an HRIS, a payroll system, a Jira replacement, a
+detailed task-management system, or a timesheet system.
+
 ## Deferred, not abandoned
 
-ProductFolio began as an enterprise capacity-and-portfolio redesign. That direction remains
-the long-term intent, and the model preserves the boundaries needed to grow into it — but
-the following are explicitly out of the first release: enterprise-wide commercial request
-negotiation, product/capability catalogs, scenario engines, token models and portfolio
-optimization, Monte Carlo forecasting, broad skill matching, employee-week scheduling, and
+ProductFolio began as an enterprise capacity-and-portfolio redesign, and that remains the
+long-term direction: who owns capacity → who provides it → what business demand exists →
+what has been committed → what work consumes capacity → what capabilities it depends on →
+what type of investment it represents → how allocation changes over time → what constraints
+and portfolio choices exist. The first release covers the Engineering slice of that chain,
+and the model preserves the boundaries needed to grow into the rest — organizational
+ownership, product/capability ownership, work dependency, and work ownership versus
+contributing teams stay distinct, and organizational hierarchy is never used to represent
+work dependency or capability consumption.
+
+Explicitly out of the first release: enterprise-wide commercial request negotiation,
+product/capability catalogs, scenario engines, token models and portfolio optimization,
+Monte Carlo forecasting, broad skill matching, employee-week scheduling, and
 execution-level task management.
 
 The pre-reset enterprise design is preserved at git tag
-`checkpoint/pre-engineering-quarterly-reset`.
+`checkpoint/pre-engineering-quarterly-reset`; deferred-scope investigation notes are listed
+in `docs/domain/README.md`.
 
 ## Run it
 
@@ -63,3 +77,8 @@ reproduces worked examples X1 and X6 from `docs/domain/DOMAIN_EXAMPLES.md`.
 Slice 1 of the first release is implemented: one team, one quarter, from census to recorded
 feasibility judgments. Further slices need explicit product-owner approval — see
 `CLAUDE.md`.
+
+## Guiding principle
+
+Prefer conceptual coherence over compatibility with ProductFolio V1. Do not preserve a V1
+concept merely because code already exists for it.

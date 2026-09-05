@@ -41,9 +41,10 @@ constrained-specialist mechanism for the first release.
 Deferred: Need, the requesting organization, and the single Product priority ranking (with
 enterprise negotiation, per D6). Retained: Commitment as an explicit record that is never
 inferred from an assignment — now simplified to the quarterly commitment of feasible work
-(`QUARTERLY_PLANNING_MODEL.md`). `DEMAND_COMMITMENT_MODEL.md` was replaced by
+(`QUARTERLY_PLANNING_MODEL.md`). The pre-reset `DEMAND_COMMITMENT_MODEL.md` was replaced by
 `QUARTERLY_PLANNING_MODEL.md`; its Need/priority content is recoverable at the checkpoint
-tag.
+tag. The file now at `DEMAND_COMMITMENT_MODEL.md` is a separate deferred-scope investigation
+note merged from `main` (see `README.md`), not an active document.
 
 ---
 

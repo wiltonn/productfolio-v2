@@ -47,6 +47,17 @@ skill-matching, employee-week scheduling, and execution-level task management. T
 expansion boundaries in `ORGANIZATION_MODEL.md` keep these paths open, and the full
 pre-reset design is preserved at git tag `checkpoint/pre-engineering-quarterly-reset`.
 
+### Deferred-scope investigation notes
+
+Two documents carry question lists for the deferred enterprise scope. They are **not
+active**: they impose no requirement on the first release, are subordinate to the active
+documents above, and are kept so the questions are not lost when expansion begins.
+
+| Document | Holds |
+|---|---|
+| `DEMAND_COMMITMENT_MODEL.md` | Questions on how Commercial Division needs become Product priorities and commitments. Several were answered pre-reset by D5 (Need and WorkPackage many-to-many; Commitment as its own record, never inferred; partial commitment allowed) — those answers are deferred with the scope, not reopened. Not to be confused with the pre-reset file of the same name, which became `QUARTERLY_PLANNING_MODEL.md`. |
+| `CAPABILITY_DEPENDENCY_MODEL.md` | Questions on durable reusable capabilities, their ownership, consumption and the dependencies on them. The first release already preserves the relevant boundaries (organizational ownership ≠ capability ownership ≠ work dependency). |
+
 ## `evidence/` — historical reference
 
 `evidence/workforce-planner/` and `evidence/original-productfolio/` hold domain evidence
@@ -55,13 +66,17 @@ They are preserved as historical reference: useful when a question genuinely tur
 legacy behaviour, never authoritative over the active documents, and **no legacy
 investigation is required** before progressing the first-release scope. If citing them,
 keep the two streams separate and use the evidence labels defined in
-`evidence/workforce-planner/README.md`.
+`evidence/workforce-planner/README.md`. Two codebases may contain the same historical
+mistake: agreement between them is not a vote in a concept's favour.
 
 ## Authority order
 
 1. Explicit current business/domain statements from the product owner.
 2. The active documents above.
 3. Historical evidence under `evidence/`.
+
+The objective is not to reproduce either legacy implementation; it is the smallest coherent
+model that accurately represents how Engineering plans a quarter.
 
 ## Recording decisions
 
