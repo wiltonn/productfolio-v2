@@ -83,7 +83,8 @@ business ambiguities that block a coherent model do.
   `src/engineering.ts` is the Engineering-wide read model over those plans; `src/web/`
   renders and routes; `src/seed.ts` loads the synthetic examples; `test/` mirrors the
   domain examples.
-- **Commands:** `npm start` (serve on port 3000), `npm run seed` (synthetic Team Atlas),
+- **Commands:** `npm start` (serve on port 3000), `npm run seed` (adds any missing synthetic
+  team — idempotent, never destructive, never requires deleting the database),
   `npm test`, `npm run typecheck`. The database lives at `data/planning.db` (gitignored;
   override with `PRODUCTFOLIO_DB`).
 - **Rules of the code:** the domain layer must reproduce `docs/domain/DOMAIN_EXAMPLES.md`

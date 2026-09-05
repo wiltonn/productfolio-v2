@@ -69,14 +69,21 @@ Requires Node 22.13 or later (the database uses the built-in `node:sqlite`).
 
 ```sh
 npm install        # three dev dependencies; no runtime dependencies
-npm run seed       # loads two clearly-labelled synthetic teams for one quarter
+npm run seed       # adds any missing synthetic team; safe to re-run
 npm start          # http://127.0.0.1:3000/  → opens on Capacity
-npm test           # 106 checks, including the worked examples in docs/domain
+npm test           # 114 checks, including the worked examples in docs/domain
 ```
 
 The plan is saved to `data/planning.db` and survives restarts. The synthetic data reproduces
 worked examples X1, X6, X9 and X10 from `docs/domain/DOMAIN_EXAMPLES.md` — including a team
 that is overallocated while Engineering as a whole still shows headroom.
+
+`npm run seed` **creates only what is missing**, one synthetic team at a time. Running it
+against a database that already holds some of the synthetic data — including one seeded by
+an earlier version that had Team Atlas alone — adds just the absent team and leaves existing
+teams, planner edits, assignments, reserves and judgment history exactly as they are. There
+is never a need to delete the database, and re-running it when both teams are present does
+nothing.
 
 ## Repository structure
 
