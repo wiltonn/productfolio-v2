@@ -9,6 +9,7 @@ import type { Database } from './db/database.js';
 import { openDatabase } from './db/database.js';
 import * as repo from './db/repo.js';
 import { DEFAULT_DB_PATH } from './config.js';
+import { recordJudgment } from './plan.js';
 
 export const SYNTHETIC_TEAM = 'Team Atlas (synthetic example)';
 export const SYNTHETIC_QUARTER = 'Q1 2027 (synthetic)';
@@ -48,20 +49,21 @@ export function seedSyntheticExample(db: Database): { teamId: number; quarterId:
   const support = wp('Support rotation and defect backlog', 'Sustain & Maintenance', 10, 10);
   wp('Search relevance tuning', 'New Development', 6, 0, 'accepted, not yet assigned');
 
-  repo.recordFeasibility(db, {
+  // Reserve before judgments: a judgment captures the team-quarter context it is made in.
+  repo.setReserve(db, { teamId, quarterId, engineerWeeks: 9 });
+
+  recordJudgment(db, {
     workPackageId: payments,
     verdict: 'feasible',
     judgedBy: 'Lena (synthetic lead)',
     assumptions: 'Estimate of 20 ew holds; no dependency on the telemetry rebuild; Rob back from leave before the March cutover.',
   });
-  repo.recordFeasibility(db, {
+  recordJudgment(db, {
     workPackageId: support,
     verdict: 'feasible',
     judgedBy: 'Lena (synthetic lead)',
     assumptions: 'Defect inflow stays at the last two quarters’ average; rotation covers one engineer at a time.',
   });
-
-  repo.setReserve(db, { teamId, quarterId, engineerWeeks: 9 });
 
   return { teamId, quarterId, created: true };
 }

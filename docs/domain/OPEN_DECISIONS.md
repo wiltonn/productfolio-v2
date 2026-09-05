@@ -113,6 +113,16 @@ sequencing, formal baseline approval/revision, and multi-team contributions to o
 WorkPackage (the first slice records each WorkPackage's estimate as *this team's*
 contribution). See `CLAUDE.md` for the implementation conventions.
 
+### D15 — Feasible-verdict prerequisites and the team-quarter reassessment rule — **DECIDED** (review of PR #24)
+A feasible verdict is refused unless capacity is assigned, the team has net delivery
+capacity the assignment fits within, the team-quarter has no shortfall, and any partial
+assignment states its reduced scope; a negative verdict is always recordable. Every judgment
+is stored with its team-quarter context (estimate, assignment, net delivery capacity,
+reserve, shortfall) and needs reassessment when any of these materially changes — including
+competing assignments that create or worsen a shortfall — but not on no-op or undone edits.
+History is preserved. Supersedes the slice-1 rule that only the package's own estimate or
+assignment timestamp invalidated a judgment. Home: `QUARTERLY_PLANNING_MODEL.md`.
+
 ---
 
 ## Open decisions

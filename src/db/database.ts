@@ -85,14 +85,36 @@ CREATE TABLE IF NOT EXISTS feasibility (
   judged_by TEXT NOT NULL,
   judged_at TEXT NOT NULL,
   assumptions TEXT NOT NULL,
-  scope_note TEXT NOT NULL DEFAULT ''
+  scope_note TEXT NOT NULL DEFAULT '',
+  ctx_estimate_ew REAL,
+  ctx_assigned_ew REAL,
+  ctx_net_delivery_ew REAL,
+  ctx_reserve_ew REAL,
+  ctx_shortfall_ew REAL
 );
 `;
+
+/** Columns added after the first schema; existing databases gain them on open. */
+const ADDED_COLUMNS: Array<{ table: string; column: string; definition: string }> = [
+  { table: 'feasibility', column: 'ctx_estimate_ew', definition: 'REAL' },
+  { table: 'feasibility', column: 'ctx_assigned_ew', definition: 'REAL' },
+  { table: 'feasibility', column: 'ctx_net_delivery_ew', definition: 'REAL' },
+  { table: 'feasibility', column: 'ctx_reserve_ew', definition: 'REAL' },
+  { table: 'feasibility', column: 'ctx_shortfall_ew', definition: 'REAL' },
+];
+
+function migrate(db: DatabaseSync): void {
+  for (const { table, column, definition } of ADDED_COLUMNS) {
+    const existing = db.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{ name: string }>;
+    if (!existing.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
 
 export function openDatabase(path: string): Database {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }

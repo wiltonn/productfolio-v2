@@ -92,6 +92,40 @@ and delivery windows fit under the rough monthly sequencing (`WORK_MODEL.md`).
 a specialist absence, or a slipped dependency reopens the judgment; the record is updated,
 not silently left stale.
 
+### Prerequisites for a feasible verdict (D15)
+
+A *feasible* verdict is refused — not stored — unless, at the moment it is recorded:
+
+1. some capacity is assigned to the WorkPackage;
+2. the team has net delivery capacity, and the assignment does not exceed it;
+3. the team-quarter has no shortfall;
+4. where assigned capacity is below the estimate, the **reduced scope** the judgment covers
+   is stated.
+
+These are necessary conditions, never sufficient ones: meeting all of them makes work
+*judgeable*, not feasible. A *not feasible* verdict is always recordable.
+
+### The team-quarter reassessment rule (D15)
+
+Every judgment is stored with the **context** it was made in: the package's estimate and
+assignment, the team's net delivery capacity, the Unplanned Work reserve, and the
+team-quarter shortfall. A judgment stays current while that context is unchanged and needs
+reassessment — and stops counting as feasible — when any of these has materially changed:
+
+| Change | Effect |
+|---|---|
+| The package's estimate or assignment | needs reassessment |
+| The team's net delivery capacity (census, schedule, absence, holiday, overhead) | needs reassessment |
+| The Unplanned Work reserve | needs reassessment |
+| Competing assignments that **create or worsen a team shortfall** | needs reassessment |
+| Competing assignments that only consume free headroom | no effect |
+| An edit re-saving the same value, or an edit later undone | no effect |
+
+"Materially" means beyond 0.005 engineer-weeks — smaller than anything a planner can
+enter, so float noise never counts and a genuine edit always does. Reassessment replaces
+nothing: the new judgment is appended and the history is kept. A judgment recorded without
+a captured context is treated as needing reassessment.
+
 ## Commitment
 
 A **Commitment** is the recorded promise that a WorkPackage (or an explicitly stated part of

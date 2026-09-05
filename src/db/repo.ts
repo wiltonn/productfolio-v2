@@ -12,7 +12,14 @@ import {
   validateOverheadPercent,
   validateSchedule,
 } from '../domain/capacity.js';
-import { type Category, type FeasibilityJudgment, isCategory, type Verdict, type WorkPackagePlan } from '../domain/planning.js';
+import {
+  type Category,
+  type FeasibilityJudgment,
+  isCategory,
+  type JudgmentContext,
+  type Verdict,
+  type WorkPackagePlan,
+} from '../domain/planning.js';
 import type { Database } from './database.js';
 
 export interface QuarterRow extends Quarter {
@@ -40,6 +47,8 @@ export interface WorkPackageRecord extends WorkPackagePlan {
   teamId: number;
   quarterId: number;
   notes: string;
+  /** ISO timestamp of the last change to estimate or assignment (informational). */
+  changedAt: string;
   judgments: FeasibilityJudgment[];
 }
 
@@ -283,21 +292,43 @@ export function getReserve(db: Database, teamId: number, quarterId: number): num
   return row?.engineer_weeks ?? 0;
 }
 
-export function recordFeasibility(
+export function isVerdict(value: string): value is Verdict {
+  return value === 'feasible' || value === 'not_feasible';
+}
+
+/**
+ * Stores a judgment together with the context it was made in. Callers are expected to go
+ * through `recordJudgment` in `plan.ts`, which computes the context and enforces the
+ * prerequisites; this function only persists.
+ */
+export function insertFeasibility(
   db: Database,
-  input: { workPackageId: number; verdict: string; judgedBy: string; assumptions: string; scopeNote?: string; judgedAt?: string },
+  input: {
+    workPackageId: number;
+    verdict: Verdict;
+    judgedBy: string;
+    assumptions: string;
+    scopeNote?: string;
+    judgedAt?: string;
+    context: JudgmentContext;
+  },
 ): void {
-  if (input.verdict !== 'feasible' && input.verdict !== 'not_feasible') throw new Error('Verdict must be feasible or not_feasible');
-  const verdict: Verdict = input.verdict;
   db.prepare(
-    'INSERT INTO feasibility (work_package_id, verdict, judged_by, judged_at, assumptions, scope_note) VALUES (?, ?, ?, ?, ?, ?)',
+    `INSERT INTO feasibility (work_package_id, verdict, judged_by, judged_at, assumptions, scope_note,
+                              ctx_estimate_ew, ctx_assigned_ew, ctx_net_delivery_ew, ctx_reserve_ew, ctx_shortfall_ew)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.workPackageId,
-    verdict,
+    input.verdict,
     requireText(input.judgedBy, 'Judged by'),
     input.judgedAt ?? now(),
     requireText(input.assumptions, 'Material assumptions'),
     (input.scopeNote ?? '').trim(),
+    input.context.estimateEw,
+    input.context.assignedEw,
+    input.context.netDeliveryEw,
+    input.context.reserveEw,
+    input.context.shortfallEw,
   );
 }
 
@@ -325,12 +356,12 @@ export function listWorkPackages(db: Database, teamId: number, quarterId: number
     )
     .all(teamId, quarterId) as unknown as WorkPackageRow[];
   const judgments = db.prepare(
-    'SELECT verdict, judged_by, judged_at, assumptions, scope_note FROM feasibility WHERE work_package_id = ? ORDER BY judged_at DESC, id DESC',
+    `SELECT verdict, judged_by, judged_at, assumptions, scope_note,
+            ctx_estimate_ew, ctx_assigned_ew, ctx_net_delivery_ew, ctx_reserve_ew, ctx_shortfall_ew
+       FROM feasibility WHERE work_package_id = ? ORDER BY judged_at DESC, id DESC`,
   );
   return rows.map((r) => {
-    const js = (
-      judgments.all(r.id) as unknown as Array<{ verdict: Verdict; judged_by: string; judged_at: string; assumptions: string; scope_note: string }>
-    ).map((j) => ({ verdict: j.verdict, judgedBy: j.judged_by, judgedAt: j.judged_at, assumptions: j.assumptions, scopeNote: j.scope_note }));
+    const js = (judgments.all(r.id) as unknown as FeasibilityRow[]).map(toJudgment);
     return {
       id: r.id,
       teamId: r.team_id,
@@ -345,6 +376,37 @@ export function listWorkPackages(db: Database, teamId: number, quarterId: number
       judgments: js,
     };
   });
+}
+
+interface FeasibilityRow {
+  verdict: Verdict;
+  judged_by: string;
+  judged_at: string;
+  assumptions: string;
+  scope_note: string;
+  ctx_estimate_ew: number | null;
+  ctx_assigned_ew: number | null;
+  ctx_net_delivery_ew: number | null;
+  ctx_reserve_ew: number | null;
+  ctx_shortfall_ew: number | null;
+}
+
+function toJudgment(j: FeasibilityRow): FeasibilityJudgment {
+  const context: JudgmentContext | null =
+    j.ctx_estimate_ew === null ||
+    j.ctx_assigned_ew === null ||
+    j.ctx_net_delivery_ew === null ||
+    j.ctx_reserve_ew === null ||
+    j.ctx_shortfall_ew === null
+      ? null
+      : {
+          estimateEw: j.ctx_estimate_ew,
+          assignedEw: j.ctx_assigned_ew,
+          netDeliveryEw: j.ctx_net_delivery_ew,
+          reserveEw: j.ctx_reserve_ew,
+          shortfallEw: j.ctx_shortfall_ew,
+        };
+  return { verdict: j.verdict, judgedBy: j.judged_by, judgedAt: j.judged_at, assumptions: j.assumptions, scopeNote: j.scope_note, context };
 }
 
 export function getWorkPackage(db: Database, id: number): { id: number; team_id: number; quarter_id: number } | undefined {

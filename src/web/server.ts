@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Database } from '../db/database.js';
 import * as repo from '../db/repo.js';
-import { loadPlan } from '../plan.js';
+import { loadPlan, recordJudgment } from '../plan.js';
 import { errorPage, indexPage, layout, planPage } from './views.js';
 
 type Form = Record<string, string>;
@@ -117,7 +117,7 @@ post(/^\/work-packages\/(\d+)\/assignment$/, ({ db, params, form }) => {
 });
 
 post(/^\/work-packages\/(\d+)\/feasibility$/, ({ db, params, form }) => {
-  repo.recordFeasibility(db, {
+  recordJudgment(db, {
     workPackageId: int(params[0]),
     verdict: form.verdict ?? '',
     judgedBy: form.judged_by ?? '',

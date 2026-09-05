@@ -62,6 +62,7 @@ const STYLE = `
   .badge.feasible { background: #d9f0e0; color: #1a6b2f; }
   .badge.stale { background: #fdecea; color: #9b1c1c; }
   details summary { cursor: pointer; color: #1f3a5f; }
+  ul.reasons { margin: 0.2rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; }
   .synthetic { background: #e8f0fe; border: 1px solid #a9c2ec; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.9rem; }
 `;
 
@@ -147,9 +148,11 @@ ${
 }
 
 function stateBadge(wp: WorkPackageView): string {
-  const { state, needsReassessment } = wp.assessment;
+  const { state, needsReassessment, reassessmentReasons } = wp.assessment;
   const base = `<span class="badge ${state}">${e(STATE_LABELS[state])}</span>`;
-  return needsReassessment ? `${base} <span class="badge stale">judgment needs reassessment</span>` : base;
+  if (!needsReassessment) return base;
+  const why = reassessmentReasons.map((r) => `<li>${e(r)}</li>`).join('');
+  return `${base}<br><span class="badge stale">judgment needs reassessment</span><ul class="muted reasons">${why}</ul>`;
 }
 
 export function planPage(plan: TeamQuarterPlan, opts: { synthetic?: boolean } = {}): string {
@@ -235,7 +238,7 @@ export function planPage(plan: TeamQuarterPlan, opts: { synthetic?: boolean } = 
       <label>Verdict <select name="verdict"><option value="feasible">Feasible</option><option value="not_feasible">Not feasible</option></select></label>
       <label>Judged by (technical lead) <input name="judged_by" required></label>
       <label class="wide">Material assumptions <textarea name="assumptions" rows="2" required placeholder="What this judgment rests on: estimates held, specialist availability, dependencies, delivery window…"></textarea></label>
-      <label class="wide">Committed scope, if reduced <input name="scope_note" placeholder="e.g. ingestion phase only"></label>
+      <label class="wide">Reduced scope this judgment covers (required when assigned &lt; estimate) <input name="scope_note" placeholder="e.g. ingestion phase only"></label>
       <div><button>Record judgment</button></div>
     </form></details></td>
 </tr>`;
@@ -296,7 +299,10 @@ Days in force = Mon–Fri days between the person's joined/left dates within the
 <section class="card">
 <p>${stateSummary}</p>
 <p class="muted">States are non-overlapping. <strong>Feasible</strong> requires a recorded technical-lead judgment; the arithmetic never confers it.
-A judgment recorded before the latest estimate or assignment change is flagged for reassessment and is not counted as feasible until re-recorded.</p>
+A feasible verdict is refused unless capacity is assigned, the team-quarter has no shortfall, and — when assigned capacity is below the estimate — the reduced scope is stated.
+A judgment is flagged for reassessment, and stops counting as feasible, when the context it was made in changes materially: this package's estimate or assignment,
+the team's net delivery capacity, the Unplanned Work reserve, or a team shortfall created or worsened by competing assignments. Re-saving the same values does not flag it.
+Judgment history is kept.</p>
 <table>
 <tr><th>WorkPackage</th><th>Category</th><th class="num">Estimate (this team, ew)</th><th class="num">Assigned (ew)</th><th>State</th><th>Feasibility judgment</th></tr>
 ${wpRows || '<tr><td colspan="6" class="muted">No work accepted yet.</td></tr>'}
