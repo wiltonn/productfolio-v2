@@ -1,11 +1,23 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Database } from '../db/database.js';
 import * as repo from '../db/repo.js';
+import { loadEngineeringQuarter } from '../engineering.js';
 import { loadPlan, recordJudgment } from '../plan.js';
-import { errorPage, indexPage, layout, planPage } from './views.js';
+import {
+  allocationsPage,
+  capacityPage,
+  censusPage,
+  errorPage,
+  layout,
+  planPage,
+  setupPage,
+  viewHref,
+  type ViewContext,
+} from './views.js';
 
 type Form = Record<string, string>;
-type Handler = (ctx: { db: Database; params: string[]; form: Form }) => Response;
+type Query = URLSearchParams;
+type Handler = (ctx: { db: Database; params: string[]; form: Form; query: Query }) => Response;
 type Response = { status: number; html?: string; redirect?: string };
 
 const routes: Array<{ method: 'GET' | 'POST'; pattern: RegExp; handler: Handler }> = [];
@@ -14,38 +26,73 @@ const post = (pattern: RegExp, handler: Handler) => routes.push({ method: 'POST'
 
 const redirect = (to: string): Response => ({ status: 303, redirect: to });
 const page = (html: string): Response => ({ status: 200, html });
-const notFound = (): Response => ({ status: 404, html: layout('Not found', '<h1>Not found</h1><p><a href="/">Home</a></p>') });
+const notFound = (): Response =>
+  ({ status: 404, html: layout('Not found', '<h1>Not found</h1><p><a href="/census">Engineering census</a></p>') });
 
 /** Only allow redirects back to pages this app serves. */
-function backOf(form: Form, fallback = '/'): string {
+const SAFE_BACK = /^\/(census|capacity|allocations|setup)(\?(q=\d+)?(&?team=\d+)?)?$|^\/plan\/\d+\/\d+$/;
+
+function backOf(form: Form, fallback = '/census'): string {
   const back = form.back ?? '';
-  return /^\/plan\/\d+\/\d+$/.test(back) ? back : fallback;
+  return SAFE_BACK.test(back) ? back : fallback;
 }
 
 const int = (s: string | undefined): number => Number.parseInt(s ?? '', 10);
 
-// ---- routes ----------------------------------------------------------------------------------
+/** The shared quarter/team selection, defaulting to the earliest quarter. */
+function contextFrom(db: Database, query: Query): ViewContext {
+  const quarters = repo.listQuarters(db);
+  const requested = Number.parseInt(query.get('q') ?? '', 10);
+  const quarterId = quarters.some((q) => q.id === requested) ? requested : (quarters[0]?.id ?? null);
+  const team = Number.parseInt(query.get('team') ?? '', 10);
+  const teamId = repo.listTeams(db).some((t) => t.id === team) ? team : null;
+  return { quarterId, teamId };
+}
 
-get(/^\/$/, ({ db }) => page(indexPage({ quarters: repo.listQuarters(db), teams: repo.listTeams(db), holidays: repo.listHolidays(db) })));
+// ---- Engineering-wide views ---------------------------------------------------------------------
 
-post(/^\/quarters$/, ({ db, form }) => {
-  repo.createQuarter(db, { name: form.name ?? '', start: form.start ?? '', end: form.end ?? '' });
-  return redirect('/');
+get(/^\/$/, ({ db, query }) => {
+  const ctx = contextFrom(db, query);
+  return redirect(ctx.quarterId === null ? '/setup' : viewHref('/capacity', ctx));
 });
 
-post(/^\/teams$/, ({ db, form }) => {
-  repo.createTeam(db, form.name ?? '');
-  return redirect('/');
+get(/^\/setup$/, ({ db, query }) =>
+  page(
+    setupPage({
+      quarters: repo.listQuarters(db),
+      teams: repo.listTeams(db),
+      holidays: repo.listHolidays(db),
+      ctx: contextFrom(db, query),
+    }),
+  ),
+);
+
+get(/^\/census$/, ({ db, query }) => {
+  const ctx = contextFrom(db, query);
+  const quarters = repo.listQuarters(db);
+  const teams = repo.listTeams(db);
+  const quarter = ctx.quarterId === null ? null : (repo.getQuarter(db, ctx.quarterId) ?? null);
+  const inScope = ctx.teamId === null ? teams : teams.filter((t) => t.id === ctx.teamId);
+  const groups =
+    quarter === null
+      ? []
+      : inScope.flatMap((team) => {
+          const plan = loadPlan(db, team.id, quarter.id);
+          return plan ? [{ team, people: plan.people, capacity: plan.capacity.people }] : [];
+        });
+  return page(censusPage({ quarters, teams, quarter, groups, ctx }));
 });
 
-post(/^\/holidays$/, ({ db, form }) => {
-  repo.addHoliday(db, { date: form.date ?? '', name: form.name ?? '' });
-  return redirect('/');
+get(/^\/capacity$/, ({ db, query }) => {
+  const ctx = contextFrom(db, query);
+  const eng = ctx.quarterId === null ? null : (loadEngineeringQuarter(db, ctx.quarterId) ?? null);
+  return page(capacityPage({ quarters: repo.listQuarters(db), teams: repo.listTeams(db), eng, ctx }));
 });
 
-post(/^\/holidays\/delete$/, ({ db, form }) => {
-  repo.deleteHoliday(db, form.date ?? '');
-  return redirect('/');
+get(/^\/allocations$/, ({ db, query }) => {
+  const ctx = contextFrom(db, query);
+  const eng = ctx.quarterId === null ? null : (loadEngineeringQuarter(db, ctx.quarterId) ?? null);
+  return page(allocationsPage({ quarters: repo.listQuarters(db), teams: repo.listTeams(db), eng, ctx }));
 });
 
 get(/^\/plan\/(\d+)\/(\d+)$/, ({ db, params }) => {
@@ -53,10 +100,39 @@ get(/^\/plan\/(\d+)\/(\d+)$/, ({ db, params }) => {
   return plan ? page(planPage(plan)) : notFound();
 });
 
-post(/^\/plan\/(\d+)\/(\d+)\/people$/, ({ db, params, form }) => {
-  const teamId = int(params[0]);
-  repo.addPerson(db, { teamId, name: form.name ?? '', joined: form.joined ?? '', left: form.left ?? '', fraction: form.fraction ?? '' });
-  return redirect(`/plan/${teamId}/${params[1]}`);
+// ---- setup writes --------------------------------------------------------------------------------
+
+post(/^\/quarters$/, ({ db, form }) => {
+  repo.createQuarter(db, { name: form.name ?? '', start: form.start ?? '', end: form.end ?? '' });
+  return redirect('/setup');
+});
+
+post(/^\/teams$/, ({ db, form }) => {
+  repo.createTeam(db, form.name ?? '');
+  return redirect('/setup');
+});
+
+post(/^\/holidays$/, ({ db, form }) => {
+  repo.addHoliday(db, { date: form.date ?? '', name: form.name ?? '' });
+  return redirect(backOf(form, '/setup'));
+});
+
+post(/^\/holidays\/delete$/, ({ db, form }) => {
+  repo.deleteHoliday(db, form.date ?? '');
+  return redirect(backOf(form, '/setup'));
+});
+
+// ---- census writes (the team is named on every form) ---------------------------------------------
+
+post(/^\/people$/, ({ db, form }) => {
+  repo.addPerson(db, {
+    teamId: int(form.team_id),
+    name: form.name ?? '',
+    joined: form.joined ?? '',
+    left: form.left ?? '',
+    fraction: form.fraction ?? '',
+  });
+  return redirect(backOf(form));
 });
 
 post(/^\/people\/(\d+)\/delete$/, ({ db, params, form }) => {
@@ -89,16 +165,18 @@ post(/^\/people\/(\d+)\/overhead$/, ({ db, params, form }) => {
   return redirect(backOf(form));
 });
 
-post(/^\/plan\/(\d+)\/(\d+)\/work-packages$/, ({ db, params, form }) => {
+// ---- work, assignments, reserve, feasibility (all owned by a team-quarter) -----------------------
+
+post(/^\/work-packages$/, ({ db, form }) => {
   repo.addWorkPackage(db, {
-    teamId: int(params[0]),
-    quarterId: int(params[1]),
+    teamId: int(form.team_id),
+    quarterId: int(form.quarter_id),
     name: form.name ?? '',
     category: form.category ?? '',
     estimateEw: form.estimate_ew ?? '',
     notes: form.notes ?? '',
   });
-  return redirect(`/plan/${params[0]}/${params[1]}`);
+  return redirect(backOf(form));
 });
 
 post(/^\/work-packages\/(\d+)\/estimate$/, ({ db, params, form }) => {
@@ -127,9 +205,9 @@ post(/^\/work-packages\/(\d+)\/feasibility$/, ({ db, params, form }) => {
   return redirect(backOf(form));
 });
 
-post(/^\/plan\/(\d+)\/(\d+)\/reserve$/, ({ db, params, form }) => {
-  repo.setReserve(db, { teamId: int(params[0]), quarterId: int(params[1]), engineerWeeks: form.engineer_weeks ?? '' });
-  return redirect(`/plan/${params[0]}/${params[1]}`);
+post(/^\/reserve$/, ({ db, form }) => {
+  repo.setReserve(db, { teamId: int(form.team_id), quarterId: int(form.quarter_id), engineerWeeks: form.engineer_weeks ?? '' });
+  return redirect(backOf(form));
 });
 
 // ---- dispatch --------------------------------------------------------------------------------
@@ -143,17 +221,17 @@ async function readForm(req: IncomingMessage): Promise<Form> {
 
 export async function handle(db: Database, req: IncomingMessage): Promise<Response> {
   const method = req.method === 'POST' ? 'POST' : 'GET';
-  const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+  const url = new URL(req.url ?? '/', 'http://localhost');
   for (const route of routes) {
     if (route.method !== method) continue;
-    const m = route.pattern.exec(path);
+    const m = route.pattern.exec(url.pathname);
     if (!m) continue;
     const form = method === 'POST' ? await readForm(req) : {};
     try {
-      return route.handler({ db, params: m.slice(1), form });
+      return route.handler({ db, params: m.slice(1), form, query: url.searchParams });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { status: 400, html: errorPage(message, backOf(form, req.headers.referer?.startsWith('http') ? new URL(req.headers.referer).pathname : '/')) };
+      return { status: 400, html: errorPage(message, backOf(form)) };
     }
   }
   return notFound();

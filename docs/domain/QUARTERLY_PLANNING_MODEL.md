@@ -2,12 +2,47 @@
 
 How team capacity is assigned to accepted work, reconciled, judged feasible, and committed.
 This document is the authoritative home of the reconciliation identity, the Unplanned Work
-reserve, the planning states, feasibility, commitments, baselines and reports.
+reserve, the planning states, feasibility, commitments, baselines, reports, and the
+Engineering-wide workspace that reads across them.
 
 Status: **active** for the first-release scope (revised 2026-09-05). This file replaced the
 pre-reset enterprise-scope `DEMAND_COMMITMENT_MODEL.md`, whose Need/priority content is
 deferred (see `OPEN_DECISIONS.md` D5, D6). The `DEMAND_COMMITMENT_MODEL.md` now on disk is a
 deferred-scope investigation note, not an active document (see `README.md`).
+
+---
+
+## The planning unit and the workspace (D16)
+
+Two ideas that must not be confused:
+
+| | **Team-quarter** | **Engineering-wide workspace** |
+|---|---|---|
+| What it is | The **planning unit**: one team, one quarter | A **view** across every team in a quarter |
+| What it owns | Assignments, the Unplanned Work reserve, the reconciliation identity, feasibility judgments and their reassessment | Nothing. It reads and totals |
+| Who answers for it | The team's responsible technical lead | Engineering leadership, reading |
+| Capacity | Belongs here, and is spendable only here | Is summed for reporting, never pooled |
+
+The workspace is how people work day to day — Census, Capacity and Allocations are reached
+without opening any team — but it introduces no new planning unit, no organizational layer,
+and no multi-team WorkPackage. Every edit made from it is applied to a **named team-quarter**,
+which the interface states on the form. Team filtering and team-level detail are conveniences,
+never prerequisites.
+
+### Two rules for Engineering-wide totals
+
+1. **Aggregate percentages are computed from summed quantities.** The Engineering overhead
+   ratio is total overhead ÷ total available capacity; the investment mix is summed
+   engineer-weeks ÷ total net delivery capacity. Averaging the teams' percentages is wrong
+   and is forbidden: it weighs a three-person team as heavily as a thirty-person one. See
+   `DOMAIN_EXAMPLES.md` X10.
+2. **Headroom and shortfall are reported separately and never netted.** One team's headroom
+   cannot be spent on another team's work — the people are not interchangeable — so a team
+   shortfall stays visible even when Engineering's arithmetic residual is positive, and even
+   when the view is filtered to another team. See X9.
+
+The residual (headroom − shortfall) may be shown as a bookkeeping figure, clearly labelled as
+such. It is never presented as deployable capacity.
 
 ---
 
@@ -155,6 +190,11 @@ assignments, reserve, feasibility records and commitments as agreed.
 
 ## Reports
 
+The Engineering-wide workspace presents these in three views — **Census** (people, schedules,
+effective dates, absences and overhead across Engineering), **Capacity** (report 1 and 4) and
+**Allocations** (reports 2, 3, 5 and 6) — sharing one quarter selection. The same figures are
+available for a single team on its team-quarter page.
+
 The first release reports, per quarter:
 
 1. **Per-team capacity reconciliation** — the full chain (contracted, absences, available,
@@ -173,3 +213,7 @@ The first release reports, per quarter:
 
 Mix percentages describe investment shape only; feasibility and fit are reported through the
 reconciliation and the feasibility records, never through percentages.
+
+Each report is available both per team-quarter and totalled across Engineering. Every
+Engineering total follows the two rules above: summed quantities before any percentage, and
+headroom never offsetting another team's shortfall.

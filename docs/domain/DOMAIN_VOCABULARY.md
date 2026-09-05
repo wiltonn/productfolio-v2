@@ -52,7 +52,13 @@ The planning period: a named, inclusive date range. Its working days are derived
 dates.
 
 ### Team-quarter
-One Team in one Quarter — the primary planning unit.
+One Team in one Quarter — the primary planning unit. It owns its assignments, reserve,
+reconciliation and feasibility judgments.
+
+### Engineering-wide workspace
+The Census, Capacity and Allocations views, which read across every Team in a Quarter and
+share one quarter selection. A view, not a planning unit: it owns nothing, pools no capacity,
+and applies every edit to a named team-quarter.
 
 ### Contracted capacity
 Working time per working schedules and effective dates.
@@ -119,8 +125,13 @@ from unassigned headroom; unclassified until consumed.
 Net delivery capacity no assignment or reserve has claimed.
 
 ### Shortfall
-Negative headroom: assignments plus reserve exceeding net delivery capacity. Always shown
-explicitly, never silently adjusted away.
+Negative headroom: assignments plus reserve exceeding net delivery capacity. Belongs to a
+team-quarter. Always shown explicitly, never silently adjusted away and never offset against
+another team's headroom.
+
+### Engineering total
+A quantity summed across the teams in a quarter. Percentages over these totals are computed
+from the summed quantities, never by averaging the teams' percentages.
 
 ### Reconciliation identity
 Net delivery capacity = assigned delivery capacity + Unplanned Work reserve + remaining
@@ -154,8 +165,8 @@ A change to the live plan after baseline approval; compared against the baseline
 overwriting it.
 
 ### Investment mix
-Assigned delivery capacity by category, as percentages with a stated denominator. Describes
-shape only; never evidence of fit.
+Assigned delivery capacity by category, as percentages with a stated denominator — a team's
+net delivery capacity, or Engineering's. Describes shape only; never evidence of fit.
 
 ---
 

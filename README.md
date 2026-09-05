@@ -21,6 +21,22 @@ The planning unit is the **team-quarter**, not the employee-week. Selective deta
 only for constrained specialists and for rough monthly sequencing where dependencies or
 delivery windows require it.
 
+## The workspace
+
+Three Engineering-wide views, reachable without opening any team, sharing one quarter
+selection:
+
+- **Census** — everyone in Engineering, grouped or filtered by team, with schedules,
+  effective dates, absences and overhead.
+- **Capacity** — the quarter's Engineering capacity chain and the per-team breakdown.
+- **Allocations** — the quarter's work, estimates, assignments, reserves, headroom and
+  shortfalls, and feasibility states across teams.
+
+The team-quarter remains the planning unit: assignments, reserves, reconciliation and
+feasibility belong to a team, every edit names the team it affects, and one team's headroom
+never covers another's shortfall. Aggregate percentages are computed from summed capacity,
+never by averaging team percentages.
+
 ## What it is not
 
 ProductFolio is not intended to become an HRIS, a payroll system, a Jira replacement, a
@@ -53,13 +69,14 @@ Requires Node 22.13 or later (the database uses the built-in `node:sqlite`).
 
 ```sh
 npm install        # three dev dependencies; no runtime dependencies
-npm run seed       # loads a clearly-labelled synthetic team and quarter
-npm start          # http://127.0.0.1:3000/
-npm test           # 81 checks, including the worked examples in docs/domain
+npm run seed       # loads two clearly-labelled synthetic teams for one quarter
+npm start          # http://127.0.0.1:3000/  → opens on Capacity
+npm test           # 106 checks, including the worked examples in docs/domain
 ```
 
-The plan is saved to `data/planning.db` and survives restarts. The synthetic example
-reproduces worked examples X1 and X6 from `docs/domain/DOMAIN_EXAMPLES.md`.
+The plan is saved to `data/planning.db` and survives restarts. The synthetic data reproduces
+worked examples X1, X6, X9 and X10 from `docs/domain/DOMAIN_EXAMPLES.md` — including a team
+that is overallocated while Engineering as a whole still shows headroom.
 
 ## Repository structure
 
@@ -69,7 +86,8 @@ reproduces worked examples X1 and X6 from `docs/domain/DOMAIN_EXAMPLES.md`.
   reference only.
 - `docs/agents/` — conventions for agents working in this repo.
 - `src/` — the application: `domain/` (pure arithmetic), `db/` (SQLite persistence),
-  `web/` (server-rendered pages), `plan.ts`, `seed.ts`.
+  `web/` (server-rendered pages), `plan.ts` (one team-quarter), `engineering.ts`
+  (the Engineering-wide read model), `seed.ts`.
 - `test/` — automated checks mirroring the domain examples.
 
 ## Current phase
