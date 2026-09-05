@@ -59,12 +59,35 @@ elsewhere — each rule has one home:
   ownership, product/service ownership, work dependency, and work ownership versus
   contributing teams stay distinct. Engineering never gets fake Product structures.
 
-## Implementation gate
+## Implementation status and gate
 
-Do not begin application implementation — no frameworks, schemas, migrations, API routes or
-UI — until the product owner explicitly approves moving beyond domain design for the
-first-release scope. Routine documentation decisions do not need approval; genuine business
-ambiguities that block a coherent model do.
+**Slice 1 is approved and implemented** (D14, 2026-09-05): one team, one quarter — census,
+capacity chain, work list, assignments, reserve, reconciliation, planning states, recorded
+feasibility judgments. Persisted locally; runnable with synthetic data.
+
+Anything beyond that slice — constrained-specialist tracking, monthly sequencing, formal
+baseline approval and revisions, multi-team contributions, and everything in the deferred
+list — still needs explicit product-owner approval before it is built. Routine
+implementation and documentation decisions within the approved slice do not; genuine
+business ambiguities that block a coherent model do.
+
+## Implementation conventions
+
+- **Stack:** Node ≥ 22.13, TypeScript run directly with `tsx` (no build step), the built-in
+  `node:sqlite` for a single-file database, server-rendered HTML on `node:http` with plain
+  forms, `node:test` for tests. Zero runtime dependencies; do not add a framework, ORM or
+  client-side bundle for this slice.
+- **Layout:** `src/domain/` holds pure arithmetic with no I/O (`calendar.ts`,
+  `capacity.ts`, `planning.ts`); `src/db/` holds the schema and repository; `src/plan.ts`
+  assembles a team-quarter; `src/web/` renders and routes; `src/seed.ts` loads the
+  synthetic example; `test/` mirrors the domain examples.
+- **Commands:** `npm start` (serve on port 3000), `npm run seed` (synthetic Team Atlas),
+  `npm test`, `npm run typecheck`. The database lives at `data/planning.db` (gitignored;
+  override with `PRODUCTFOLIO_DB`).
+- **Rules of the code:** the domain layer must reproduce `docs/domain/DOMAIN_EXAMPLES.md`
+  exactly and the tests assert it; every displayed quantity states its unit
+  (engineer-weeks) and every percentage its denominator; arithmetic flags shortfalls and
+  staleness but never confers feasibility; synthetic data is labelled synthetic.
 
 ---
 

@@ -5,8 +5,13 @@ these cleanly — definitions and arithmetic — is revised or rejected.
 
 Numbering restarts at this reset (2026-09-05); the enterprise-scope examples X1–X14 are
 preserved at git tag `checkpoint/pre-engineering-quarterly-reset`. Each example is
-independent unless it says otherwise. All quantities are engineer-weeks (ew); the quarter in
-these examples has 13 planning weeks.
+independent unless it says otherwise. All quantities are engineer-weeks (ew).
+
+**The example quarter** is synthetic "Q1 2027": Monday 2027-01-04 to Friday 2027-04-02
+inclusive — exactly 13 weeks, 65 working days — with an **empty holiday calendar** so the
+figures are round. Per D13 a real quarter's working days are derived from its dates (a
+calendar Q1 2027, 1 January to 31 March, has 64). X1 and X6 are reproduced exactly by the
+synthetic seed data (`npm run seed`) and by the automated tests.
 
 Throughout, capacity is time: nothing here predicts output, and no number is discounted for
 proficiency.
@@ -24,10 +29,11 @@ Team Atlas, Q1:
 | Chen | full-time | all quarter | 13.0 |
 | Dana | full-time | all quarter | 13.0 |
 | Priya | 0.6 part-time | all quarter | 7.8 |
-| Marta | full-time | joins week 5 (works weeks 5–13) | 9.0 |
+| Marta | full-time | joins 2027-02-01 (week 5; 45 working days) | 9.0 |
 | | | **Contracted capacity** | **68.8** |
 
-Known absences: Rob 2 weeks leave = 2.0; Priya 1 week leave at her 0.6 schedule = 0.6.
+Known absences: Rob on leave 2027-02-15 → 2027-02-26 (10 working days) = 2.0; Priya on
+leave 2027-03-08 → 2027-03-12 (5 working days at her 0.6 schedule) = 0.6.
 
 ```
 Available workforce capacity = 68.8 − 2.6            = 66.2
@@ -142,3 +148,23 @@ R1 adds 3.0 ew to the package by consuming the remaining headroom (2.0) and deli
 reducing the reserve (4.0 → 3.0). The commitment is renegotiated explicitly on the new
 feasibility record. Reports now show R1 against B: what was promised at approval versus what
 the plan says today. B is never edited.
+
+## X8 — A holiday inside leave is counted once
+
+Team Atlas (from X1), but the holiday calendar now contains Wednesday 2027-02-17 — a day
+that falls inside Rob's leave.
+
+| Person | Effect of the holiday |
+|---|---|
+| Lena, Chen, Dana, Marta (full-time, in force) | −0.2 ew each |
+| Priya (0.6 schedule) | −0.12 ew |
+| Rob (already on leave that day) | no change: the day was already absent |
+
+```
+Known absences = 2.6 + (4 × 0.2) + 0.12 = 3.52 ew     (was 2.6)
+Rob's absent days stay at 10, not 11.
+```
+
+The holiday reduces available capacity for everyone in force, at their own scheduled
+fraction, and a day covered by both a holiday and leave is absent exactly once (D13). Had
+the holiday fallen on a Saturday it would have changed nothing.

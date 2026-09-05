@@ -18,7 +18,7 @@ All of these exist on disk and are current:
 | `WORKFORCE_CAPACITY_MODEL.md` | The capacity arithmetic: contracted → available → net delivery; absence, overhead, overhead ratio, constrained specialists |
 | `WORK_MODEL.md` | WorkPackage, the quarterly work list, estimates, delivery investment categories, dependencies and delivery windows |
 | `QUARTERLY_PLANNING_MODEL.md` | Assignments, the reconciliation identity, the Unplanned Work reserve, planning states, feasibility, commitments, baselines, reports |
-| `DOMAIN_EXAMPLES.md` | Worked examples X1–X7 validating definitions and arithmetic |
+| `DOMAIN_EXAMPLES.md` | Worked examples X1–X8 validating definitions and arithmetic; X1, X3, X6, X8 are asserted by `test/` |
 | `OPEN_DECISIONS.md` | The decision log — settled, superseded and open decisions |
 | `REJECTED_CONCEPTS.md` | Deliberately excluded concepts, with reasons |
 
@@ -32,6 +32,11 @@ All of these exist on disk and are current:
 
 The planning unit is the team-quarter; a quarterly plan never requires employee-by-week
 assignments.
+
+**Implementation status:** slice 1 (one team, one quarter: census → capacity chain → work
+list → assignments → reserve → reconciliation → planning states → recorded feasibility
+judgments) is implemented under `src/`; see `OPEN_DECISIONS.md` D14 for what remains within
+the first release.
 
 ## Deferred work
 

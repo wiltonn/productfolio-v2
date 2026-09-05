@@ -95,19 +95,28 @@ creates new product or system capability. Home: `WORK_MODEL.md`.
 Approval freezes the baseline; mid-quarter changes create revisions compared against it.
 Home: `QUARTERLY_PLANNING_MODEL.md`.
 
+### D13 — Calendar-derived working time — **DECIDED** (product owner, 2026-09-05; resolves O1)
+Capacity is computed from the actual Monday–Friday working days inside the quarter's date
+range, each person's working schedule, and their effective dates — never from an assumed
+number of weeks. The standard full-time week is 5 working days = 1.0 engineer-week. Holidays
+come from a configurable calendar the organization enters (no jurisdiction assumed, nothing
+fetched), count as known absence for everyone in force, and a day is absent at most once
+whether covered by a holiday, leave, or both. Overhead is a percentage of the person's own
+available capacity. Home: `WORKFORCE_CAPACITY_MODEL.md`, "Calendar-derived working time".
+
+### D14 — Implementation approved for the first slice — **DECIDED** (product owner, 2026-09-05)
+Implementation may proceed for one team, one quarter: census, capacity chain, work list,
+assignments, reserve, reconciliation, planning states and recorded feasibility judgments.
+Still deferred within the first release: constrained-specialist tracking, monthly
+sequencing, formal baseline approval/revision, and multi-team contributions to one
+WorkPackage (the first slice records each WorkPackage's estimate as *this team's*
+contribution). See `CLAUDE.md` for the implementation conventions.
+
 ---
 
 ## Open decisions
 
-None of these blocks a coherent domain model; O1 is the only one that must be settled
-before the arithmetic is implemented.
-
-### O1 — Quarter and week calendar convention — **OPEN, settle before implementation**
-How many planning weeks a quarter has (13-week convention versus derived from calendar
-dates), and where the public-holiday list comes from. **Recommendation:** calendar
-quarters, planning weeks derived from actual dates, public holidays enumerated per the
-organization's holiday calendar and recorded as known absences (the model already treats
-them as such).
+None of these blocks the first slice.
 
 ### O2 — Census source and stewardship — **OPEN, non-blocking**
 What system of record feeds the Engineering census, and who maintains effective dates.

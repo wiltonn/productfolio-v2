@@ -33,15 +33,33 @@ execution-level task management.
 The pre-reset enterprise design is preserved at git tag
 `checkpoint/pre-engineering-quarterly-reset`.
 
+## Run it
+
+Requires Node 22.13 or later (the database uses the built-in `node:sqlite`).
+
+```sh
+npm install        # three dev dependencies; no runtime dependencies
+npm run seed       # loads a clearly-labelled synthetic team and quarter
+npm start          # http://127.0.0.1:3000/
+npm test           # 54 checks, including the worked examples in docs/domain
+```
+
+The plan is saved to `data/planning.db` and survives restarts. The synthetic example
+reproduces worked examples X1 and X6 from `docs/domain/DOMAIN_EXAMPLES.md`.
+
 ## Repository structure
 
-- `CLAUDE.md` — the current working brief and implementation gate.
+- `CLAUDE.md` — the current working brief, implementation status and conventions.
 - `docs/domain/` — the authoritative domain model. Start at `docs/domain/README.md`.
 - `docs/domain/evidence/` — historical evidence from the two legacy implementations;
   reference only.
 - `docs/agents/` — conventions for agents working in this repo.
+- `src/` — the application: `domain/` (pure arithmetic), `db/` (SQLite persistence),
+  `web/` (server-rendered pages), `plan.ts`, `seed.ts`.
+- `test/` — automated checks mirroring the domain examples.
 
 ## Current phase
 
-Domain documentation for the first-release scope. Application implementation does not begin
-until the product owner approves moving past domain design.
+Slice 1 of the first release is implemented: one team, one quarter, from census to recorded
+feasibility judgments. Further slices need explicit product-owner approval — see
+`CLAUDE.md`.

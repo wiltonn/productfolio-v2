@@ -33,11 +33,23 @@ from the rest of the team; the one sanctioned case of individual-level capacity 
 
 ## Capacity (`WORKFORCE_CAPACITY_MODEL.md`)
 
+### Working day
+Monday to Friday. Weekends are never working days.
+
+### Standard full-time week
+Five working days. The basis of the engineer-week.
+
 ### Engineer-week
-The comparable time unit: one week of one Person's full contracted schedule.
+The comparable time unit: five working days at a full-time schedule (one working day at
+full-time = 0.2 engineer-weeks).
+
+### Holiday calendar
+The organization's own list of holiday dates, entered deliberately; no jurisdiction is
+assumed. Holidays count as known absence for everyone in force that day.
 
 ### Quarter
-The planning period.
+The planning period: a named, inclusive date range. Its working days are derived from its
+dates.
 
 ### Team-quarter
 One Team in one Quarter — the primary planning unit.
@@ -46,15 +58,17 @@ One Team in one Quarter — the primary planning unit.
 Working time per working schedules and effective dates.
 
 ### Known absence
-Working time the organization knows it will not have — leave, public holidays, training.
-The only reduction between contracted and available capacity.
+Working time the organization knows it will not have — leave, holidays from the holiday
+calendar, training. The only reduction between contracted and available capacity; a day is
+absent at most once however many entries cover it.
 
 ### Available workforce capacity
 Contracted capacity − known absences.
 
 ### Overhead
 Management and administration: accounted-for work reported separately, netted out of
-delivery capacity and never distributed across the delivery investment categories.
+delivery capacity and never distributed across the delivery investment categories. Stated
+per person as a percentage of their available workforce capacity.
 
 ### Net delivery capacity
 Available workforce capacity − overhead. The quantity the quarterly plan reconciles.

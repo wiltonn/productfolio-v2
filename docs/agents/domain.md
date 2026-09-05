@@ -2,9 +2,9 @@
 
 How agents should consume and maintain this repo's domain documentation.
 
-ProductFolio V2 is documenting a **small Engineering quarterly-planning system** ahead of
-implementation. There is no application code yet — the domain documents *are* the codebase.
-Treat them with the care you would give production source.
+ProductFolio V2 is a **small Engineering quarterly-planning system**. The domain documents
+are the specification the code must reproduce: `test/` asserts the worked examples in
+`docs/domain/DOMAIN_EXAMPLES.md`, so a change to either side must keep the other true.
 
 ## Where the domain lives
 
@@ -67,8 +67,9 @@ rather than routing around it. A proposed change that breaks the arithmetic in
 
 ## The implementation gate
 
-Do not write application code — no frameworks, no schemas, no migrations, no API routes, no
-UI components — until the product owner explicitly approves moving beyond domain design for
-the first-release scope. Skills that would normally produce code (`tdd`, `prototype`,
-`diagnosing-bugs`) have no target here yet; if one is invoked, say so and offer the
-domain-design equivalent — a worked example, an invariant, an open decision — instead.
+Implementation is approved only for the slice recorded in `OPEN_DECISIONS.md` D14 and
+`CLAUDE.md`. Do not build beyond it — no specialist tracking, sequencing, baseline
+approval, multi-team contributions, integrations or deferred-scope features — without
+explicit product-owner approval. Within the slice, follow the implementation conventions in
+`CLAUDE.md`, keep the domain layer free of I/O, and add a test whenever a worked example is
+touched.
