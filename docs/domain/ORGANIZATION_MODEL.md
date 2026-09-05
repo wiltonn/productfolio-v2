@@ -1,124 +1,66 @@
 # Organization Model
 
-How organizational ownership and workforce structure are represented.
+How the Engineering organization and its people are represented, and the boundaries the
+model must preserve as it expands. This document is the authoritative home of the census and
+the expansion boundaries.
 
-Status: **in progress.** This document records what has been settled. Unsettled areas are named
-as such and carry a pointer to the open decision.
-
----
-
-## Ownership and consumption are different relationships
-
-The model draws a hard line between two questions that look alike and behave differently:
-
-| Question | Answered from | Never answered from |
-|---|---|---|
-| Whose capacity is this? | Membership | Allocation |
-| What was that capacity spent on? | Allocation | Membership |
-
-**Only work consumes capacity.** Belonging to an organizational unit does not spend an
-Employee's time, however that belonging is described. An organizational unit holds no claim on
-a share of a person.
-
-This keeps §8.1 (organizational ownership) separate from §14 (capacity contribution), and it is
-what allows one body of work to draw capacity from several organizations without any of them
-owning the others' people.
-
-### Why the distinction is not merely tidy
-
-An Engineer whose Membership is in Engineering, allocated to work committed to OEM, must appear
-as **Engineering's capacity** and as **OEM's consumption** at the same time. A model in which
-belonging consumes capacity cannot express this without double-counting the person or
-misattributing the supply.
+Status: **active** for the first-release scope (revised 2026-09-05).
 
 ---
 
-## Membership
+## First-release scope: Engineering only
 
-An Employee's capacity is owned by exactly one organizational unit at any moment.
+The first release models the **Engineering organization**: its teams and its people. No
+Commercial Division, Product Portfolio, Product Workstream or Product Area is modelled yet.
 
-- Membership attributes **supply**; it never spends time.
-- Exactly one is in force at a time. There is no percentage on a Membership, because a
-  percentage would make *whose capacity is this?* a question with more than one answer.
-- Membership is temporal. It changes, and history stays true — see the open decision on
-  temporal relationships.
+## The census
 
-## Affiliation
+The **Engineering census** is the authoritative roster: who is in Engineering, on which
+team, on what working schedule, effective when.
 
-An Employee may additionally hold any number of non-owning **Affiliations** — relationships
-expressing that a unit is aligned with, or may draw upon, a person it does not own.
+- **Person** — an individual in the census. The basis of all capacity calculation
+  (`WORKFORCE_CAPACITY_MODEL.md`). Carries a working schedule (full-time or a contracted
+  fraction) with effective dates.
+- **Team** — a relatively stable workforce unit; the unit whose quarter capacity is planned.
+  Every person in the census belongs to exactly one team at any moment (retained from D1:
+  membership attributes supply and never spends time).
+- **Team membership is effective-dated.** People join, leave, change schedule and change
+  team mid-quarter; the census records when each fact takes effect, and a team's
+  capacity for a quarter is computed from the memberships and schedules in force week by
+  week. History stays true — a past quarter's plan reads against the census as it was.
+- Teams may optionally be grouped (for example under an Engineering function) for reporting.
+  Grouping depth is data, not a rule of the model (retained from D3).
 
-An Affiliation owns nothing and spends nothing. It exists so the model can say *this unit may
-draw on this person* without that statement becoming a claim on their time.
+The census also records each person's expected **overhead** and, where relevant, marks a
+person as a **constrained specialist** (both defined in `WORKFORCE_CAPACITY_MODEL.md`).
 
-**Open:** whether V2 needs a typed taxonomy of Affiliations, and whether "may be drawn from"
-belongs here at all or is properly a concept of the capability model. Carried by
-*Capability, shared service, or platform — which abstraction?*
+## Expansion boundaries
 
----
+These distinctions are safeguards for later growth, not instructions to build the enterprise
+model now. Nothing in the first release may collapse them:
 
-## One structure, typed units
+1. **Organizational ownership** — which unit owns a person's capacity — is one relationship.
+2. **Product/service ownership** — which team owns a durable product, platform or service —
+   is a different relationship, never derived from org structure.
+3. **Work dependency** — what work depends on other work — is a relationship between pieces
+   of work, never an organizational parent/child link.
+4. **Work ownership versus contributing teams** — a team contributing capacity to work is
+   not thereby owned by the work's owner or sponsor (`WORK_MODEL.md`).
 
-The enterprise is **one organizational structure**: a single tree of **Organizational Units**
-rooted at the Enterprise, with Commercial Divisions, the Product organization and Engineering
-as peer branches beneath it.
+Two standing prohibitions carry forward unchanged:
 
-OEM is a Commercial Division within that tree. It is not the root, and nothing above a Division
-is division-specific.
-
-Every unit is the same kind of thing, which is what lets Membership, capacity supply and
-traversal work uniformly regardless of which branch a person sits in.
-
-### The type is a label, not a grammar
-
-Each unit carries a **type** — Commercial Division, Product Portfolio, Product Workstream,
-Product Area, Engineering Function, Team, and so on. The type says what a unit *is*, for
-reading and for roll-up: *capacity by Product Portfolio*, *capacity by Commercial Division*.
-
-The type deliberately does **not** constrain composition. The model does not declare what may
-contain what. This was a considered choice: §7 requires Engineering's structure to be
-investigated rather than assumed, and §26 warns that organizational relationships move, so
-encoding a composition grammar now would fix a hierarchy that has not been validated.
-
-**The accepted consequence** — shape correctness is a property of the *data*, not of the model.
-Nothing prevents a Division being placed under a Team. Both existing implementations took this
-same approach and their type tags went decorative: V1's nine-member `OrgNodeType` gates exactly
-one thing (`ROOT`), has no parent-type validation at all, and four of its nine members were
-appended in a migration with no supporting code, test or UI. That is the failure mode to watch
-for; the mitigation is validating the data, and revisiting this decision if the type stops
-meaning anything.
-
-## Engineering
-
-Engineering is a peer branch, not a Product Portfolio. It is never represented by borrowing
-Product's levels (§7).
-
-**Its depth varies by group.** Some Engineering functions have an intermediate grouping between
-the function and its teams; others run straight to teams. Depth is a property of the data, not
-a rule of the model — which the absence of a composition grammar supports directly.
-
-## Commercial Divisions
-
-A Commercial Division is modelled **as deep as its capacity goes, and no deeper**.
-
-- Units that own people whose weeks are planned here — dedicated software and delivery teams —
-  are modelled as Organizational Units.
-- Functions whose capacity this system does not plan — sales, go-to-market, commercial
-  operations — are **not** modelled. As far as they are concerned the Division is a single unit.
-
-This keeps §5 and §14 answerable: an OEM custom-software team is a real unit that owns capacity
-and can contribute to work alongside Product and Engineering, while the rest of OEM adds no
-structure the system asks questions about.
+- **Engineering must never be represented with fake Product structures** — no invented
+  Product Portfolios, Workstreams or Areas to make Engineering fit a Product hierarchy.
+- **OEM must not be assumed to own the shared Product organization.** When the model grows
+  beyond Engineering, Commercial Divisions, Product and Engineering are peers; no division
+  is the root.
 
 ---
 
-## Not yet settled
+## Not carried into the first release
 
-- **Which organizational relationships need history or future-effective dating.** Carried by
-  *Which organizational relationships need history?* Note that Membership's role as the supply
-  attribution makes its temporal behaviour load-bearing for any dated roll-up.
-- **Whether an organizational unit can be an allocation target**, and what it would mean given
-  that units do not consume capacity. Carried by *What can a weekly allocation point at?*
-- **Whether Product Area is also the capability-ownership concept**, or whether capability
-  ownership is a separate relationship. Carried by *Capability, shared service, or platform —
-  which abstraction?*
+- The **enterprise organizational tree** (Enterprise → Commercial Divisions / Product /
+  Engineering as peer branches, typed but ungoverned units) — the D3 design is deferred
+  intact and remains the intended shape at expansion.
+- **Affiliation** (non-owning drawable relationships) — deferred with the capability model.
+- Modelling Commercial Divisions and the Product organization at all.

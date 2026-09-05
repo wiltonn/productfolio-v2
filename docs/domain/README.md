@@ -1,188 +1,65 @@
 # ProductFolio V2 Domain Design
 
-This directory contains the authoritative domain model for ProductFolio V2.
-
-These documents describe the business domain independently of database, API and UI implementation.
-
-## Documents
-
-### DOMAIN_VOCABULARY.md
-
-Canonical vocabulary.
-
-Every important domain term should have one precise meaning.
-
-Avoid synonyms for established concepts.
-
-### DOMAIN_MODEL.md
-
-The current integrated V2 domain model.
-
-Describes concepts, relationships, cardinality, boundaries and important temporal behaviour.
-
-### ORGANIZATION_MODEL.md
-
-How organizational ownership and workforce structure are represented.
-
-Includes:
-
-- OEM Division;
-- Product;
-- Product Portfolios;
-- Product Workstreams;
-- Product Areas;
-- Engineering;
-- Teams;
-- Employees;
-- changing organizational assignments.
-
-### WORK_MODEL.md
-
-How work is represented independently from organizational structure.
-
-Used to settle concepts such as:
-
-- WorkPackage;
-- Initiative;
-- Project;
-- WorkItem;
-- planning targets;
-- execution work.
-
-### WORKFORCE_CAPACITY_MODEL.md
-
-Defines:
-
-- employee capacity;
-- weekly allocation;
-- Workforce Plan;
-- allocation targets;
-- availability;
-- planned versus committed capacity;
-- future allocation planning;
-- derived capability supply.
-
-### DEMAND_COMMITMENT_MODEL.md
-
-How a commercial need becomes something Product has promised to deliver.
-
-Covers Need, Commitment, the requesting organization, the two magnitudes, and priority.
-
-### DOMAIN_INVARIANTS.md
-
-Business rules that must remain true regardless of implementation.
-
-Examples:
-
-- every unit of planned work must ultimately resolve to one top-level investment classification;
-- workforce allocations cannot create employee capacity;
-- scenarios must not silently mutate the authoritative baseline.
-
-### DOMAIN_EXAMPLES.md
-
-Concrete examples used to test the model.
-
-Examples should include normal cases and difficult edge cases across Product and Engineering.
-
-A proposed domain model should be rejected or revised if it cannot represent these examples cleanly.
-
-### OPEN_DECISIONS.md
-
-Important unresolved domain decisions.
-
-Each decision should contain:
-
-- question;
-- context;
-- options;
-- consequences;
-- recommendation where appropriate;
-- final decision once made.
-
-### V1_DOMAIN_EXTRACTION.md
-
-Domain concepts and useful behaviours extracted from the original ProductFolio implementation.
-
-V1 is evidence, not authority.
-
-### WORKFORCE_PLANNER_EVIDENCE.md
-
-Domain evidence extracted from the newer workforce-planner implementation.
-
-The implementation may contain inconsistent concepts.
-
-Document observed behaviour separately from inferred intent.
-
-### REJECTED_CONCEPTS.md
-
-Important concepts or structures deliberately excluded from V2.
-
-Record why they were rejected so they are not accidentally reintroduced later.
-
-### evidence/workforce-planner/
-
-Deep evidence from the workforce-planner implementation branch, including selected contrasts
-with the original model. This is §29's second evidence stream.
-
-Start with:
-
-- `evidence/workforce-planner/README.md` for scope and evidence labels;
-- `evidence/workforce-planner/SOURCE_MANIFEST.md` for reproducibility status;
-- `evidence/workforce-planner/COVERAGE_MATRIX.md` for missing evidence streams; and
-- `evidence/workforce-planner/NEXT_STEPS_USING_MATTPOCOCK_SKILLS.md` for the staged continuation plan.
-
-
-### evidence/original-productfolio/
-
-Targeted evidence from the original ProductFolio implementation — §29's first evidence stream.
-Surveyed at `wiltonn/productfolio` `e62c2d7` (`main`) and `07368d6` (`v1/solver`), including the
-`feat/L1`–`L4` solver branches. Unlike the workforce-planner package, these citations are
-reproducible against source.
-
-Extracted to answer specific decisions on the domain map rather than to mirror a full evidence
-set: `work-model.md`, `organization.md`, `allocation-capacity.md`, `capability-token-solver.md`,
-`demand-commitment.md`, `scenario-baseline-time.md`.
-
-The two evidence directories are kept separate deliberately (§29). Do not merge them, and state
-which stream any citation comes from.
-
----
-
-# Evidence Labels
-
-When documenting repository-derived findings, use:
-
-**OBSERVED**
-
-Directly demonstrated by code, tests, UI or documentation.
-
-**INFERRED**
-
-A likely domain meaning derived from observed behaviour.
-
-**UNKNOWN**
-
-A question that cannot currently be answered from available evidence.
-
----
-
-# Domain Authority
-
-When sources disagree:
-
-1. Explicit current business intent.
-2. Real workflows and operational requirements.
-3. Proven behaviour from existing implementations.
-4. Historical implementation structures and terminology.
-
-The objective is not to reproduce either existing implementation.
-
-The objective is to derive the smallest coherent model that accurately represents the business.
-
----
-
-# Current Domain North Star
-
-ProductFolio should model:
-
-**Who owns capacity → who provides capacity → what work consumes capacity → what kind of investment that work represents → how allocation changes over time → what portfolio choices are possible.**
+The authoritative domain model for ProductFolio V2: a small **Engineering
+quarterly-planning system** (scope reset 2026-09-05 — see `OPEN_DECISIONS.md` D6).
+
+These documents describe the business domain independently of database, API and UI
+implementation. Every rule has exactly one authoritative home; other documents point to it
+rather than restating it.
+
+## Active documents
+
+All of these exist on disk and are current:
+
+| Document | Authoritative for |
+|---|---|
+| `DOMAIN_VOCABULARY.md` | Canonical terms, one meaning each, with home pointers |
+| `ORGANIZATION_MODEL.md` | The Engineering census — people, teams, schedules, effective dates — and the expansion boundaries |
+| `WORKFORCE_CAPACITY_MODEL.md` | The capacity arithmetic: contracted → available → net delivery; absence, overhead, overhead ratio, constrained specialists |
+| `WORK_MODEL.md` | WorkPackage, the quarterly work list, estimates, delivery investment categories, dependencies and delivery windows |
+| `QUARTERLY_PLANNING_MODEL.md` | Assignments, the reconciliation identity, the Unplanned Work reserve, planning states, feasibility, commitments, baselines, reports |
+| `DOMAIN_EXAMPLES.md` | Worked examples X1–X7 validating definitions and arithmetic |
+| `OPEN_DECISIONS.md` | The decision log — settled, superseded and open decisions |
+| `REJECTED_CONCEPTS.md` | Deliberately excluded concepts, with reasons |
+
+## What the first release must support
+
+1. Engineering census and quarterly capacity.
+2. A quarterly work list of estimated WorkPackages.
+3. Team-quarter capacity assignments and reconciliation.
+4. Defensible feasibility judgments and quarterly commitments, with approved baselines
+   preserved separately from revisions.
+
+The planning unit is the team-quarter; a quarterly plan never requires employee-by-week
+assignments.
+
+## Deferred work
+
+Deferred with the scope reset (D6), not abandoned: enterprise-wide commercial request
+negotiation (Need, priority ranking), detailed product/capability catalogs, scenario
+engines, token models and portfolio optimization, Monte Carlo forecasting, broad
+skill-matching, employee-week scheduling, and execution-level task management. The
+expansion boundaries in `ORGANIZATION_MODEL.md` keep these paths open, and the full
+pre-reset design is preserved at git tag `checkpoint/pre-engineering-quarterly-reset`.
+
+## `evidence/` — historical reference
+
+`evidence/workforce-planner/` and `evidence/original-productfolio/` hold domain evidence
+extracted from the two legacy implementations during the earlier enterprise-scope redesign.
+They are preserved as historical reference: useful when a question genuinely turns on
+legacy behaviour, never authoritative over the active documents, and **no legacy
+investigation is required** before progressing the first-release scope. If citing them,
+keep the two streams separate and use the evidence labels defined in
+`evidence/workforce-planner/README.md`.
+
+## Authority order
+
+1. Explicit current business/domain statements from the product owner.
+2. The active documents above.
+3. Historical evidence under `evidence/`.
+
+## Recording decisions
+
+See `docs/agents/domain.md` for the working conventions: update the rule's home document,
+the vocabulary, the decision log, rejected concepts and the examples together — a decision
+that exists only in conversation history has not been made.

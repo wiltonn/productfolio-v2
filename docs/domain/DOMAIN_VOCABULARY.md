@@ -1,168 +1,156 @@
 # Domain Vocabulary
 
-Canonical vocabulary for ProductFolio V2. Every term has one precise meaning. Where a term is
-still unsettled, it is listed under *Unsettled* rather than given a provisional definition.
-
-This is a glossary. It contains no schema, no API and no implementation detail.
+Canonical vocabulary for ProductFolio V2's first-release scope (revised 2026-09-05). Every
+term has one precise meaning and one authoritative home document; definitions here are
+deliberately short — the home carries the full rule.
 
 ---
 
-## Settled terms
+## Census and organization (`ORGANIZATION_MODEL.md`)
 
-### Employee
-
-An individual source of workforce capacity.
-
-### Capacity
-
-The working time an Employee has. Capacity belongs to the Employee, is finite, varies over
-time, and is **time only** — it is never discounted by how effectively that time is used.
-
-### Contracted capacity
-
-An Employee's own working week. It is the denominator of every allocation percentage: 100%
-means all of *this* Employee's week, not a nominal full-time week.
-
-### Absence
-
-Capacity the organization does not have — leave, holiday, statutory time away. Absence is the
-only thing that reduces an Employee's capacity.
-
-### Available capacity
-
-Contracted capacity less Absence. The time the organization actually has from an Employee.
-
-### Unallocated capacity
-
-Available capacity not yet spent on work. Real headroom.
-
-### Overhead
-
-Not a domain concept. Management duty, administration and other non-delivery obligations are
-**work**, and are allocated like any other work — see [[rejected-overhead-as-capacity-reduction]]
-in `REJECTED_CONCEPTS.md`.
-
-### FTE
-
-An Employee's capacity expressed against a standard full-time week, so people can be compared
-and summed across a team. A derived reporting conversion, never the planning unit.
-
-### Membership
-
-The relationship that makes an Employee's capacity **owned** by an organizational unit.
-Membership answers *whose capacity is this?* — it attributes supply, and it never spends time.
-
-An Employee has **exactly one** Membership at any moment. Membership is temporal: it changes,
-and past Memberships remain true of the past.
-
-### Affiliation
-
-A non-owning relationship between an Employee and an organizational unit — being aligned to
-it, or being drawable from it. An Employee may hold **any number** of Affiliations at once.
-
-An Affiliation never owns capacity and never spends it. It exists to express that a unit may
-*draw on* a person without owning them.
-
-### Allocation
-
-The relationship that **spends** an Employee's capacity. Only work is allocated to; capacity is
-consumed by allocation and by nothing else.
-
-### Capacity supply
-
-The capacity an organizational unit owns, derived from the Memberships in force. A question
-about supply is answered from Membership.
-
-### Capacity consumption
-
-The capacity spent on work, derived from Allocations. A question about what capacity went to is
-answered from Allocation, never from Membership.
-
-### Organizational Unit
-
-Any node in the enterprise's organizational structure — a Commercial Division, a Product
-Portfolio, a Product Workstream, a Product Area, an Engineering Function, a Team. All units are
-the same kind of thing; a unit's **type** says what it is, for reading and roll-up, and does not
-constrain what may contain what.
-
-### Enterprise
-
-The root of the organizational structure. Commercial Divisions, the Product organization and
-Engineering are peer branches beneath it. No Commercial Division is the root — OEM included.
-
-### Commercial Division
-
-A durable commercial/business organizational boundary. Modelled as deep as its capacity goes:
-units owning people whose weeks are planned here are represented; sales and go-to-market
-functions are not.
-
-### Product Portfolio · Product Workstream · Product Area
-
-The Product organization's unit types, in containment order as normally arranged. A Product
-Portfolio is an executive Product boundary led by a Product VP; a Product Workstream is a
-grouping within one; a Product Area is a durable Product responsibility.
-
-"Workstream" refers to Product organizational structure and nothing else. It is never a generic
-synonym for work.
-
-### Engineering Function
-
-An Engineering unit type. Engineering is a peer branch of Product, never represented by
-borrowing Product's levels. Its depth varies by group.
+### Person
+An individual in the Engineering census; the basis of all capacity calculation.
 
 ### Team
+A relatively stable workforce unit; the unit whose quarterly capacity is planned. A Person
+belongs to exactly one Team at any moment.
 
-A relatively stable unit that owns people. Teams exist in every branch.
+### Engineering census
+The authoritative roster: who is in Engineering, on which Team, on what working schedule,
+effective when.
+
+### Working schedule
+A Person's contracted working pattern — full-time or a contracted fraction — with effective
+dates.
+
+### Effective date
+The date from which a census fact (join, leave, schedule change, team change) holds. History
+stays true.
+
+### Constrained specialist
+A Person whose particular expertise is required by specific work and cannot be substituted
+from the rest of the team; the one sanctioned case of individual-level capacity detail.
+
+## Capacity (`WORKFORCE_CAPACITY_MODEL.md`)
+
+### Engineer-week
+The comparable time unit: one week of one Person's full contracted schedule.
+
+### Quarter
+The planning period.
+
+### Team-quarter
+One Team in one Quarter — the primary planning unit.
+
+### Contracted capacity
+Working time per working schedules and effective dates.
+
+### Known absence
+Working time the organization knows it will not have — leave, public holidays, training.
+The only reduction between contracted and available capacity.
+
+### Available workforce capacity
+Contracted capacity − known absences.
+
+### Overhead
+Management and administration: accounted-for work reported separately, netted out of
+delivery capacity and never distributed across the delivery investment categories.
+
+### Net delivery capacity
+Available workforce capacity − overhead. The quantity the quarterly plan reconciles.
+
+### Overhead ratio
+Overhead ÷ available workforce capacity.
+
+## Work (`WORK_MODEL.md`)
 
 ### WorkPackage
+A meaningful body of work against which capacity is planned. The only level of work in the
+model; no subtypes, nothing beneath it.
 
-A meaningful body of work against which capacity is planned — a capability launch, a migration,
-a regulatory change, a sustain effort, a tech-debt effort, a custom software delivery.
+### Quarterly work list
+The set of WorkPackages accepted for a Quarter.
 
-ProductFolio models exactly one level of work. There is no concept beneath a WorkPackage:
-execution detail lives in the delivery tools. A WorkPackage has no subtype — "Initiative" and
-"Project" are not V2 concepts.
+### Estimate
+A WorkPackage's rough capacity requirement in engineer-weeks, broken into team
+contributions where several teams are required.
 
-### Demand
+### Delivery investment category
+Exactly one per WorkPackage: **New Development** (canonical label; "Roadmap Delivery" is an
+accepted synonym), **Sustain & Maintenance**, or **Tech Debt**. Overhead and the Unplanned
+Work reserve sit outside the categories.
 
-The capacity and capability required to accomplish a WorkPackage. Demand belongs to the
-WorkPackage and may be shaped by capability, so that it can be compared against supply.
+### Dependency
+One WorkPackage (or external event) that must complete before another can proceed. Never an
+organizational relationship.
 
-### Contribution
+### Delivery window
+A date constraint on a WorkPackage, such as a regulatory deadline.
 
-An organizational unit providing capacity to a WorkPackage, through the Allocations of its
-people. Contributing capacity to work never makes a unit organizationally part of the work's
-sponsor.
+### Monthly sequencing
+Rough month-level placement of team contributions, used only where a dependency or delivery
+window requires it.
 
-### Need
+## Quarterly planning (`QUARTERLY_PLANNING_MODEL.md`)
 
-Something a requesting organization wants — a market, customer or business requirement. A Need
-has a **requesting organization**, carries a coarse magnitude for triage, and carries signals
-(urgency, customer impact, business value) that inform prioritization without being a rank.
+### Capacity assignment
+A specific quantity of a named Team's net delivery capacity earmarked to an accepted
+WorkPackage for the Quarter. May be partial, and partial must be visible as partial.
 
-A Need is not a WorkPackage in an early state. A Need may require several WorkPackages, and a
-WorkPackage may serve several Needs.
+### Unplanned Work reserve
+An explicit reserve of delivery capacity for work not yet known. Separate from overhead and
+from unassigned headroom; unclassified until consumed.
+
+### Unassigned headroom
+Net delivery capacity no assignment or reserve has claimed.
+
+### Shortfall
+Negative headroom: assignments plus reserve exceeding net delivery capacity. Always shown
+explicitly, never silently adjusted away.
+
+### Reconciliation identity
+Net delivery capacity = assigned delivery capacity + Unplanned Work reserve + remaining
+unassigned headroom.
+
+### Accepted
+On the quarterly work list. Says nothing about assignment or feasibility.
+
+### Assigned
+Having at least one capacity assignment.
+
+### Feasible
+Judged deliverable by the responsible technical lead given estimates, specialist
+constraints, dependencies and sequencing.
+
+### Feasibility judgment
+The recorded lead judgment and its material assumptions; reassessed when those assumptions
+change.
 
 ### Commitment
+The recorded promise that a WorkPackage (or a stated part of one) will be delivered in the
+Quarter. Only feasible work may be committed; never inferred from an assignment.
 
-A promise by a delivering organization to meet a Need, on stated terms: what was agreed, for
-which period, by whom, to whom. A Commitment is **frozen when made**, while the Need it answers
-remains editable. It may cover part of a Need or span several.
+### Baseline
+The approved quarterly plan, preserved unchanged.
 
-A Commitment is never inferred from the existence of an allocation.
+### Revision
+A change to the live plan after baseline approval; compared against the baseline, never
+overwriting it.
 
-### Priority
-
-A single ranking, held by Product, across all requesting organizations. Needs carry signals that
-inform it; a requesting organization does not maintain its own ranking in the model.
-
+### Investment mix
+Assigned delivery capacity by category, as percentages with a stated denominator. Describes
+shape only; never evidence of fit.
 
 ---
 
-## Deliberately unsettled
+## Reserved terms (deferred scope)
 
-These terms are open questions, not vocabulary. Do not use them as though settled; say which
-sense you mean and flag it.
+These terms keep their pre-reset meanings and must not be repurposed, but are not part of
+the first release: **Enterprise**, **Commercial Division**, **Product Portfolio**,
+**Product Workstream**, **Product Area**, **Membership**, **Affiliation**, **FTE**,
+**Weekly Allocation**, **Workforce Plan**, **Scenario**, **Need**, **Priority**,
+**Capability / Skill**, **Token**. Their prior definitions are preserved at git tag
+`checkpoint/pre-engineering-quarterly-reset`.
 
-- **Skill · Capability · Job Profile · Role · Discipline** — the capability model (§20).
-- **Token** — whether the term survives at all (§21).
+"Workstream" in particular still refers to Product organizational structure and is never a
+generic synonym for work.

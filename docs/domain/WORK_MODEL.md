@@ -1,95 +1,96 @@
 # Work Model
 
-How work is represented, independently of organizational structure.
+How work is represented. This document is the authoritative home of the WorkPackage, the
+quarterly work list, estimates, the delivery investment categories, and dependencies.
 
-Status: **in progress.** Settled items are stated plainly; unsettled areas name the open
-decision carrying them.
+Status: **active** for the first-release scope (revised 2026-09-05).
 
 ---
 
 ## One level of work: the WorkPackage
 
-A **WorkPackage** is a meaningful body of work against which capacity is planned.
+A **WorkPackage** is a meaningful body of work against which capacity is planned — a feature
+delivery, a migration, a regulatory change, a sustain effort, a tech-debt effort.
 
-Examples: a customer capability launch, a product enhancement, a cloud migration, a regulatory
-change, a modernization effort, a major technical-debt effort, a custom software delivery, a
-shared platform enhancement.
+ProductFolio models **one** level of work, retained from decision D4. There is no concept
+beneath a WorkPackage: execution detail — epics, stories, tickets, defects — lives in the
+delivery tools. Ticket estimates and detailed timesheets are never required. A WorkPackage
+has no subtype; "Initiative" and "Project" are not V2 concepts
+(see `REJECTED_CONCEPTS.md`).
 
-ProductFolio models **one** level of work. Execution detail — epics, stories, tickets, defects —
-lives in the delivery tools and is not a ProductFolio concept.
+## The quarterly work list
 
-### Why there is no level beneath it
+The **quarterly work list** is the set of WorkPackages **Accepted** for a quarter. Accepted
+means exactly that the work is on the list — it says nothing about whether capacity has been
+assigned to it or whether it is feasible. The full planning-state ladder
+(Accepted → Assigned → Feasible → Committed) is defined in `QUARTERLY_PLANNING_MODEL.md`.
 
-§13 offered a planning-unit / execution-unit split as a hypothesis to validate. The validation
-came back negative.
+## Estimates
 
-**OBSERVED** — The original ProductFolio had no `WorkItem` at all (zero occurrences repo-wide)
-and ran with nothing below its planning unit. In the newer implementation, `WorkItem` exists
-*because* `ScopeItem.initiativeId` is `NOT NULL` — its own schema comment says so — and is kept
-deliberately thin because a second set of demand numbers *"would immediately diverge"*.
+Each accepted WorkPackage carries a **rough capacity estimate** in **engineer-weeks**
+(defined in `WORKFORCE_CAPACITY_MODEL.md`).
 
-A level below the planning unit therefore has to be argued from workflow, and no workflow argued
-for it. §13's own guidance points the same way: managers are not to plan at ticket-level
-precision, and a level the model never plans at earns nothing but a reconciliation problem.
+- Where the work requires more than one team, the estimate is broken into **team-specific
+  contributions** (for example: 20 engineer-weeks = Atlas 14 + Beacon 6).
+- Where the work requires a constrained specialist, the estimate may state that requirement
+  explicitly (for example: including 4 engineer-weeks of the search specialist).
+- Estimates are deliberately rough — comparable time-based quantities, not commitments of
+  precision. They exist so assignment and feasibility have something defensible to reconcile
+  against.
 
-### Why there is only one kind of it
+The estimate belongs to the WorkPackage (retained from D4: the thing you estimate and the
+thing you staff are the same record).
 
-**OBSERVED** — `Project` and `Initiative` are behaviourally interchangeable (`J7`): the same
-container shape, the same targeting, the same attribution, the same retirement. The PRD asserts
-a distinction — *"Initiative = temporary strategic outcome. Project = optional execution
-container"* — that the schema never encodes, and `Project` has no administrative UI at all. The
-original shipped only `Initiative`.
+## Delivery investment categories
 
-A WorkPackage carries no subtype. Whether it carries an *investment class* is a separate
-question — see *What owns investment classification?*
+Every WorkPackage on the quarterly work list is classified into exactly one **delivery
+investment category**:
 
-### Why it is not called an Initiative
+| Canonical label | Meaning |
+|---|---|
+| **New Development** | Work that creates new product or system capability — roadmap delivery. ("Roadmap Delivery" is an accepted business synonym; the canonical label is New Development.) |
+| **Sustain & Maintenance** | Work that keeps existing capability running and supported — defect response, upkeep, operational support of what already exists. |
+| **Tech Debt** | Work that improves the internal quality, structure or platform health of existing systems without changing what they do for users. |
 
-"Initiative" carries a strategic, temporary connotation. Ongoing product work that belongs to no
-initiative is the case the newer implementation was largely built to represent (`E13`), and
-filing it as "an Initiative" fails §25's test that a business user can explain the concept
-without wincing. WorkPackage covers §12's full range without that strain.
+Two things are deliberately **outside** these categories:
+
+- **Overhead** (management and administration) is netted out before delivery planning and
+  reported separately — never distributed across the categories
+  (`WORKFORCE_CAPACITY_MODEL.md`).
+- The **Unplanned Work reserve** is unclassified until it is consumed by actual work
+  (`QUARTERLY_PLANNING_MODEL.md`).
+
+Category percentages describe the **investment mix**. They never establish whether accepted
+work fits — fit is a matter of reconciliation and feasibility. Any reported percentage must
+state its denominator.
+
+## Dependencies and delivery windows
+
+A WorkPackage may **depend on** another WorkPackage (or on an external event), and may have
+a **delivery window** — a date constraint such as a regulatory deadline or a vendor cutover.
+
+Where a dependency or window constrains when work can happen inside the quarter, the plan
+may add **rough monthly sequencing**: which month(s) each affected team's contribution lands
+in. This is the coarsest sequencing that lets feasibility be judged; it is not a schedule,
+and it is used only where a dependency or window requires it.
+
+Work dependency is a relationship between pieces of work. It is never an organizational
+relationship — see the expansion boundaries in `ORGANIZATION_MODEL.md`.
+
+## Work ownership versus contributing teams
+
+A WorkPackage has an owner (the team or lead answerable for it) and may draw assigned
+capacity from several teams. Contributing capacity to a WorkPackage does not transfer
+ownership of the work, and does not make the contributing team part of the owner's
+organization. Retained from D4 and the pre-reset cross-organizational-work rule; this
+boundary must survive expansion (see `ORGANIZATION_MODEL.md`).
 
 ---
 
-## Demand belongs to the WorkPackage
+## Not carried into the first release
 
-A WorkPackage carries its own **demand** — the capacity and capability required to accomplish
-it. Demand may be shaped by capability: three backend-weeks and two design-weeks is a different
-statement from five weeks, and the difference is what makes constraint analysis possible.
-
-That breakdown is a property of the WorkPackage's demand, **not** a separate body of work.
-
-**This is the gap both implementations left open.** `J20` asks whether the thing you estimate
-and the thing you staff should be the same record; in both codebases they were not, and were
-never reconciled — demand hours and allocation hours live in unrelated tables that one endpoint
-prints side by side without comparing. §22 requires demand and supply to be comparable. Hanging
-both off the same record is what makes them so.
-
----
-
-## Work is not owned by one organization
-
-A WorkPackage may draw capacity from units in any branch — Commercial, Product, Engineering —
-without any of those units becoming part of another, and without the work becoming
-organizationally owned by whoever sponsored it (§14). Contribution of capacity and organizational
-ownership are different relationships; see `ORGANIZATION_MODEL.md` and `X9`.
-
-Work must be able to exist without a sponsor's initiative-like framing at all: ongoing product
-work is a WorkPackage like any other (`I11`, `E13`).
-
----
-
-## Not yet settled
-
-- **A WorkPackage's lifecycle**, and whether its state transitions must be durably recorded.
-  Carried by *What is a WorkPackage's lifecycle?*
-- **What owns investment classification**, and whether a WorkPackage carries it. Carried by
-  *What owns investment classification?*
-- **Whether a WorkPackage is an allocation target**, and what else may be. Carried by *What can a
-  weekly allocation point at?*
-- **How work depends on work or on capability.** Carried by *How work depends on work* — note
-  that **OBSERVED**, work-to-work dependency was never shipped in either implementation, so V2
-  inherits nothing here.
-- **How a commercial need becomes a commitment**, and what that commitment attaches to. Carried
-  by *How a commercial need becomes a product commitment*.
+- **WorkItem** — remains rejected as a planning concept (see `REJECTED_CONCEPTS.md`).
+- **Capability-shaped demand** (backend-weeks vs design-weeks as first-class capability
+  types) — deferred with the enterprise scope; the constrained-specialist mechanism covers
+  the first-release need. See `OPEN_DECISIONS.md` D6.
+- **Need and the Product priority ranking** — deferred; see `OPEN_DECISIONS.md` D5/D6.

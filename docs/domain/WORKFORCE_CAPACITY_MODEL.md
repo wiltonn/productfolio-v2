@@ -1,82 +1,103 @@
 # Workforce Capacity Model
 
-How employee capacity, its reduction and its consumption are represented.
+How Engineering capacity is measured. This document is the authoritative home of the
+capacity arithmetic; other documents reference it and do not restate it.
 
-Status: **in progress.** Settled items are stated plainly; unsettled areas name the open
-decision carrying them.
+Status: **active** for the first-release scope (revised 2026-09-05).
 
 ---
 
 ## Capacity is time
 
-An Employee's capacity is their working time. It is not adjusted for how effectively that time
-is used — proficiency, ramp-up and estimating buffers describe *how much gets done*, not *how
-much time exists*.
+Capacity measures **working time, not productivity**. It is never discounted by proficiency,
+ramp-up or estimating buffers — those describe how much gets done in the time, which is an
+estimation question, not a capacity question. Capacity and predicted output must never be
+conflated.
 
-This matters because the alternative makes a person's week change size depending on what they
-are pointed at, and *is this person full?* becomes unanswerable without knowing how well their
-skills match their assignments.
+## The unit and the period
 
-## The three quantities
+- The atomic quantity is the **engineer-week**: one week of one person's full contracted
+  working schedule. A half-time person contributes 0.5 engineer-weeks per week.
+- The planning period is the **quarter**. Team capacity is stated per team per quarter.
+- The planning unit is the **team-quarter**. Individual-level detail exists in the model
+  only where this document says it does (constrained specialists) — a quarterly plan must
+  not require employee-by-week assignments.
 
-| Quantity | Meaning | Derived from |
-|---|---|---|
-| **Contracted capacity** | The Employee's own working week. The denominator of every percentage. | The Employee |
-| **Available capacity** | Contracted capacity less Absence. The time the organization actually has. | Contracted − Absence |
-| **Unallocated capacity** | Available capacity not yet spent. Real headroom. | Available − Allocated |
+## The capacity chain
 
-**100% means all of this Employee's own contracted week** — not a nominal full-time week. A
-half-time Employee planned at 100% is fully committed, and is over-allocated above it.
+Four quantities, each derived from the one before:
 
-### FTE is a derived conversion, not the planning unit
+| Quantity | Definition |
+|---|---|
+| **Contracted capacity** | Working time per the person's working schedule and effective dates |
+| **Available workforce capacity** | Contracted capacity − known absences |
+| **Net delivery capacity** | Available workforce capacity − overhead |
+| *(assignment happens here)* | See `QUARTERLY_PLANNING_MODEL.md` for the reconciliation of net delivery capacity |
 
-FTE expresses an Employee's capacity against a standard full-time week so that people can be
-compared and summed across a team. It is a reporting conversion applied to the planning
-numbers; it is never what a manager plans in.
+### Contracted capacity
 
-A half-time Employee planned at 100% therefore reads as **full** on their own row and as
-**0.5** in the team roll-up. Both are correct: they answer different questions.
+Contracted capacity reflects each person's **working schedule** and **effective dates**:
 
-## Absence
+- part-time arrangements count at their contracted fraction;
+- a person joining during the quarter contributes only from their start date;
+- a person leaving during the quarter contributes only until their end date;
+- schedule changes mid-quarter apply from their effective date.
 
-Absence is capacity the organization does not have — leave, holiday, statutory time away. It
-reduces available capacity.
+A team's contracted capacity for a quarter is the sum over its members of the engineer-weeks
+their schedules yield during the weeks their team membership is in force.
 
-Absence is the **only** thing that reduces capacity. Everything else a person spends time on is
-work, and is allocated.
+### Known absences
 
-## Overhead is work
+A **known absence** is working time the organization knows it will not have: planned leave,
+parental leave, public holidays, training commitments and similar. Absences are recorded at
+the fraction of the person's schedule they remove (a part-timer's week of leave removes a
+part-time week).
 
-Management duty, administration and other non-delivery obligations are **work**, not capacity
-reductions. They are allocated like anything else.
+**Available workforce capacity = contracted capacity − known absences.**
 
-A manager who spends a quarter of their time managing has not lost that time — they have spent
-it. The alternative models the same fact twice: once as a smaller week, once as a thing being
-done.
+### Overhead
 
-**Consequence:** *unallocated* and *available* are the same headroom. The rule that they differ
-(`I3` in the workforce-planner evidence) was true only because overhead was modelled as a
-capacity reduction; once overhead is work, the distinction is derivable rather than a standing
-warning. Carried to *Which invariant candidates are real?* for restatement.
+**Overhead** is management and administration: accounted-for work that keeps the team
+running but does not deliver on the work list. It is real, expected work — not waste and not
+absence — and it is **reported separately**.
 
-## Over-allocation
+- **Net delivery capacity = available workforce capacity − overhead.**
+- **Overhead ratio = overhead ÷ available workforce capacity.** (State this denominator
+  whenever the ratio is reported.)
+- Overhead must **not** be distributed across the delivery investment categories. Doing so
+  would overstate delivery capacity and corrupt the investment mix.
 
-Over-allocation is allocation beyond **available** capacity — measured against the Employee's
-own week after Absence, never against a nominal week and never against a bare literal 100.
+Overhead is typically stated per person per quarter (for example, a lead who spends 40% of
+their time managing carries 0.4 × their weeks as overhead) and summed to the team.
 
-Both existing implementations compared against a literal `100` regardless of the person, which
-makes over-allocation undetectable for exactly the part-time Employees most at risk of it.
+## Team-quarter capacity
+
+Everything above rolls up to one statement per team per quarter:
+
+```
+contracted → (− known absences) → available → (− overhead) → net delivery capacity
+```
+
+Net delivery capacity is the number the quarterly plan reconciles against; the
+reconciliation identity and its terms (assigned capacity, Unplanned Work reserve, unassigned
+headroom, shortfall) are defined in `QUARTERLY_PLANNING_MODEL.md`.
+
+## Constrained specialists
+
+Where a team contains a **constrained specialist** — a person whose particular expertise is
+required by specific work and cannot be substituted from the rest of the team — the plan may
+track that person's own net capacity and the demands on it individually.
+
+This is the deliberate, selective exception to team-level planning. It exists because
+aggregate team fit is necessary but insufficient: a plan whose team totals fit can still be
+infeasible because one specialist is overloaded (see `DOMAIN_EXAMPLES.md` X4). It is not a
+license for general individual scheduling.
 
 ---
 
-## Not yet settled
+## Not carried into the first release
 
-- **Whether over-allocation is prevented or merely reported.** Carried by *Which invariant
-  candidates are real?* (`I4`, `J2`).
-- **What an allocation may point at.** Carried by *What can a weekly allocation point at?*
-- **How management and administrative work classify** against the three investment classes,
-  given §11 requires everything to roll up to exactly one. Carried by *What owns investment
-  classification?*
-- **Whether proficiency or ramp enter the model at all**, and if so as a property of the
-  person-and-work match. Carried by *Capability, shared service, or platform — which
-  abstraction?*
+- **Weekly percentage allocation per employee** — the earlier planning grain. Deferred; see
+  `OPEN_DECISIONS.md` D7.
+- **FTE conversions, Membership/Affiliation machinery, capability-shaped supply** — deferred
+  with the enterprise scope; see `OPEN_DECISIONS.md` D6.

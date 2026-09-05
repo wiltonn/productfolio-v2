@@ -1,218 +1,144 @@
 # Domain Examples
 
-Concrete cases the model must represent cleanly. A proposed model that cannot express these is
-revised or rejected.
+Worked examples for the first-release scope. A proposed model change that cannot represent
+these cleanly — definitions and arithmetic — is revised or rejected.
 
-Examples are drawn from the evidence packages and re-derived under the settled V2 model. Where
-an example's reading changes, the change is stated.
+Numbering restarts at this reset (2026-09-05); the enterprise-scope examples X1–X14 are
+preserved at git tag `checkpoint/pre-engineering-quarterly-reset`. Each example is
+independent unless it says otherwise. All quantities are engineer-weeks (ew); the quarter in
+these examples has 13 planning weeks.
 
----
-
-## X1 — A full week across several kinds of work
-
-```
-Sarah — week of Oct 5, contracted 40h
-  Customer capability work    50%
-  Sustain                     20%
-  Tech debt                   20%
-  Management duty             10%
-  ──────────────────────────────────
-  available 100%   allocated 100%   unallocated 0%   AT
-```
-
-Management duty is allocated, not deducted. Sarah has spent her week, not lost part of it.
-
-## X2 — Absence reduces the week
-
-*Derived from `E4` in the workforce-planner evidence.*
-
-```
-contracted 100%
-  Absence (leave)             40%
-  Product work                60%
-  ──────────────────────────────────
-  available 60%   allocated 60%   unallocated 0%   AT
-```
-
-The same answer `E4` gives, without needing a rule that unallocated differs from available. A
-naive `100 − allocated` would still wrongly report 40% of headroom; the model avoids it by
-subtracting Absence from the denominator rather than by special-casing the arithmetic.
-
-## X3 — Over-allocated while absent
-
-*Derived from `E5`, which reads "over-allocated by reserved time alone".*
-
-```
-contracted 100%
-  Absence (leave)             60%
-  Management duty             50%
-  ──────────────────────────────────
-  available 40%   allocated 50%   OVER by 10%
-```
-
-Under the V2 model this is the plainer statement: someone absent for most of the week has been
-given more work than the remainder holds. The original framing — over-allocated by reserved
-time alone, with no work at all — was an artefact of counting management as a reduction.
-
-## X4 — A part-time employee at full commitment
-
-*Derived from `E6`.*
-
-```
-Employee contracted 20h/week
-  Platform work              100%
-  ──────────────────────────────────
-  available 100%   allocated 100%   AT
-  roll-up contribution: 0.5 FTE
-```
-
-Full on their own row, half in the team total. Both correct. Note that both existing
-implementations report this person as *at* capacity but would also report them at capacity when
-over-committed, because each compares against a literal 100 rather than the person's own week.
-
-## X5 — Capacity is not discounted by effectiveness
-
-```
-Employee contracted 40h, proficiency 3 of 5 in the required skill
-  Work                       100%
-  ──────────────────────────────────
-  available 100%   allocated 100%   AT
-```
-
-The Employee is full. They are not "60% full because they are a level-3 engineer". How much
-gets delivered in that time is a question for estimation and capability, not for capacity —
-see `original-productfolio/allocation-capacity.md` on `effectiveHours`.
-
-## X6 — Capacity owned in one place, spent in another
-
-```
-Employee: Membership in Engineering
-  Allocated to work committed to OEM      70%
-  Allocated to shared platform work       30%
-```
-
-Engineering owns 1.0 FTE of supply. OEM consumes 0.7 of it. Neither statement makes the
-Employee organizationally part of OEM. See `ORGANIZATION_MODEL.md`.
-
-## X7 — Engineering's ragged depth
-
-```
-Enterprise
-└── Engineering
-    ├── Platform Engineering  (Engineering Function)
-    │   ├── Infrastructure Group        ← intermediate grouping
-    │   │   └── Networking Team
-    │   └── Data Group
-    │       └── Pipelines Team
-    └── Developer Experience  (Engineering Function)
-        └── Tooling Team                ← no intermediate grouping
-```
-
-Both branches are legal. Depth is a property of the data, not a rule of the model, so one
-Engineering Function may have a group layer while its sibling does not.
-
-## X8 — A Commercial Division modelled only as deep as its capacity
-
-```
-Enterprise
-└── OEM  (Commercial Division)
-    └── OEM Custom Software  (Team)      ← owns people whose weeks are planned
-    ✗ OEM Sales                          ← not modelled
-    ✗ OEM Commercial Operations          ← not modelled
-```
-
-The Division is a real unit and so is its software team. Its go-to-market functions own people
-this system does not plan, so representing them would add structure that answers no question.
-
-## X9 — One capability, four contributing organizations
-
-*The §14 case, expressible once X6 and X8 hold.*
-
-```
-An OEM customer capability draws capacity from:
-  OEM Custom Software        (Team, under a Commercial Division)
-  A Product Area's team      (under Product)
-  A shared platform team     (under Engineering)
-```
-
-Three Memberships in three branches; three sets of Allocations to **one WorkPackage**. No unit
-becomes organizationally part of another, and no contributing team is owned by the sponsor.
-
-## X10 — Ongoing product work is a WorkPackage
-
-```
-WorkPackage: "Content parser maintenance"
-  no sponsor initiative, no end date framing
-  allocations: 100% of one engineer, ongoing
-```
-
-*Derived from `E13`, which the evidence calls the case the newer implementation was largely
-built to represent — and which that implementation then structurally excluded from "strategic"
-because it belonged to no Initiative.* Under V2 there is no such exclusion: it is a WorkPackage
-like any other, and how it classifies as investment is a separate question.
-
-## X11 — Demand and supply on the same record
-
-```
-WorkPackage: "Dealer portal launch"
-  Demand:   backend   3 person-weeks
-            design    2 person-weeks
-  Supply:   allocations from the OEM Custom Software team and a Product team
-```
-
-Both hang off the WorkPackage, so "is this adequately staffed, and in which capability is it
-short?" is answerable. In both existing implementations these lived in unrelated tables that no
-code compared (`J20`).
-
-## X12 — One Need, three WorkPackages, three organizations
-
-```
-Need: "Dealers can quote finance at point of sale"
-  requesting organization: Dealer Solutions
-  coarse estimate: ~2 quarters
-  signals: urgency HIGH, named customer commitment
-
-satisfied by
-  WorkPackage "Quoting API"           owner: a Product Area
-  WorkPackage "Dealer portal surface"  owner: Dealer Solutions custom software
-  WorkPackage "Rate service uplift"    owner: an Engineering platform team
-```
-
-The Need belongs to Dealer Solutions; none of the three packages does, and no owning unit
-becomes part of Dealer Solutions by contributing. Compare `X9`, which shows the same shape from
-the capacity side.
-
-## X13 — A Commitment covering part of a Need
-
-```
-Commitment
-  answers:  "Dealers can quote finance at point of sale"
-  covers:   the Quoting API and the Rate service uplift
-  period:   Q3
-  agreed:   Product VP (Payments) with the Dealer Solutions lead
-  frozen at agreement; the Need remains editable
-```
-
-The dealer portal surface is not committed for Q3. The Need is therefore **partly met**, and
-stays visible as such — the state V1 could not express, having no commitment concept and four
-unrelated things called APPROVED.
-
-## X14 — Planned work nobody asked for
-
-```
-WorkPackage "Search index rebuild"
-  demand and allocations present
-  no Commitment, no Need
-```
-
-Legal and visible. It is simply work Product chose to do, distinguishable from committed work
-because commitment is a record rather than an inference. **OBSERVED** — V1 needed a dedicated
-"intake leakage" metric to find this case at all.
+Throughout, capacity is time: nothing here predicts output, and no number is discounted for
+proficiency.
 
 ---
 
-## Examples still to be added
+## X1 — A team with part-time capacity, absences and overhead
 
-Cases that cannot yet be written because the concepts they need are unsettled: one body of work
-drawing capacity from four organizations (§14), a commercial need becoming a commitment (§9),
-and a scenario deviating from the plan of record (§19).
+Team Atlas, Q1:
+
+| Person | Schedule | In force | Contracted |
+|---|---|---|---|
+| Lena (lead) | full-time | all quarter | 13.0 |
+| Rob | full-time | all quarter | 13.0 |
+| Chen | full-time | all quarter | 13.0 |
+| Dana | full-time | all quarter | 13.0 |
+| Priya | 0.6 part-time | all quarter | 7.8 |
+| Marta | full-time | joins week 5 (works weeks 5–13) | 9.0 |
+| | | **Contracted capacity** | **68.8** |
+
+Known absences: Rob 2 weeks leave = 2.0; Priya 1 week leave at her 0.6 schedule = 0.6.
+
+```
+Available workforce capacity = 68.8 − 2.6            = 66.2
+Overhead: Lena manages 40% of her time = 0.4 × 13    =  5.2
+Net delivery capacity        = 66.2 − 5.2            = 61.0
+Overhead ratio               = 5.2 ÷ 66.2            ≈  7.9%   (denominator: available)
+```
+
+Checks the definitions: the part-timer's week of leave removes a part-time week (0.6, not
+1.0); the joiner contributes only from her effective date; overhead is netted out and
+reported with its ratio, not spread across delivery categories.
+
+## X2 — Accepted work that is only partially assigned
+
+WorkPackage "Telemetry pipeline rebuild", category New Development.
+Estimate: 20.0 ew — team contributions Atlas 14.0, Beacon 6.0.
+
+Assignments this quarter: Atlas 8.0, Beacon 6.0 → assigned 14.0 of 20.0 estimated.
+
+- State: **assigned, not feasible** (for the full scope). Partial assignment is visible as
+  partial and does not imply coverage.
+- The Atlas lead's judgment: with 8.0 of the 14.0 Atlas ew, only the ingestion phase lands
+  this quarter. Either a reduced-scope commitment ("ingestion phase only") is made — with
+  that scope stated on the commitment — or nothing is committed. The full package must not
+  be treated as covered because assignments exist.
+
+## X3 — A draft whose assignments exceed delivery capacity
+
+Team Atlas (from X1): net delivery capacity 61.0.
+
+Draft plan: assignments total 55.0, Unplanned Work reserve 9.0.
+
+```
+61.0 = 55.0 + 9.0 + headroom   →   headroom = −3.0
+```
+
+The draft is overallocated and must report: **shortfall 3.0 ew**. The identity is shown with
+the negative term; nothing is scaled down, no assignment is trimmed, and the reserve is not
+silently raided to make the numbers balance. Resolving the shortfall is an explicit edit —
+reduce assignments, reduce the reserve deliberately, or revisit acceptance.
+
+## X4 — Team totals fit, but a constrained specialist is overloaded
+
+Team Delta: net delivery capacity 40.0. Plan: assigned 36.0 + reserve 3.0 + headroom 1.0 —
+the identity balances and the aggregate fits.
+
+Sam is Delta's only search specialist (constrained specialist in the census):
+contracted 13.0 − absence 1.0 − overhead 1.0 = **Sam's net capacity 11.0**.
+
+Specialist demand inside the assigned work: WP-A needs 5.0 of Sam, WP-B 4.0, WP-C 4.0 —
+total **13.0 against Sam's 11.0**, an overload of 2.0.
+
+Aggregate fit was necessary but insufficient. The lead's feasibility judgment marks WP-C
+**not feasible** as sequenced, with the material assumption recorded ("requires 4.0 ew of
+search expertise; Sam is the only source and is 2.0 over"). The plan changes only through an
+explicit choice: descope, move specialist demand across quarters, or add substitutable help.
+
+## X5 — Cross-team work blocked by a dependency and a delivery window
+
+WorkPackage "Billing cutover", delivery window: must complete this quarter (regulatory).
+Contributions: Beacon rates API 6.0 ew; Atlas integration 8.0 ew.
+Dependencies: the vendor upgrade completes at the end of month 1 → Beacon can start in
+month 2; Atlas integration can start only after Beacon's API completes.
+
+Rough monthly sequencing (required here because a dependency and a window constrain it):
+
+| Month | Beacon API | Atlas integration | Atlas capacity free that month |
+|---|---|---|---|
+| 1 | blocked (vendor) | blocked | — |
+| 2 | 6.0 | blocked | — |
+| 3 | — | needs 8.0 | 5.0 |
+
+Both teams have enough **quarter-total** headroom, but all 8.0 Atlas ew must land in
+month 3, where only 5.0 are free. The lead records the judgment **not feasible** with its
+assumptions (vendor date, month-3 load), and the options — move 3.0 ew of other Atlas work
+out of month 3, descope, or renegotiate the window. Quarter-level totals alone would have
+called this plan healthy.
+
+## X6 — Unplanned Work consuming reserve without double counting
+
+Team Atlas, approved plan: `61.0 = assigned 48.0 + reserve 9.0 + headroom 4.0`.
+
+Week 6: an urgent authentication patch arrives — estimate 3.0 ew. It is accepted onto the
+work list, classified **Sustain & Maintenance**, and assigned 3.0 from the reserve:
+
+```
+before   61.0 = 48.0 + 9.0 + 4.0
+after    61.0 = 51.0 + 6.0 + 4.0
+```
+
+The 3.0 appears exactly once — as a classified assignment. The reserve falls by the same
+amount in the same movement; headroom is untouched; the identity stays balanced. Until
+consumed, the remaining 6.0 of reserve stays visible as reserve, outside the investment
+categories.
+
+## X7 — A mid-quarter revision that preserves the approved baseline
+
+Team Beacon, approved baseline **B**: `30.0 = assigned 24.0 + reserve 4.0 + headroom 2.0`,
+including 6.0 assigned to "Rates API v2", committed, with the recorded material assumption
+"vendor SDK v3 is API-stable".
+
+Week 6: the assumption breaks — the SDK changes force rework, and the estimate for Beacon's
+contribution rises from 6.0 to 9.0. Because a material assumption changed, feasibility is
+reassessed, and a revision **R1** is created:
+
+```
+B  (preserved, unchanged)   30.0 = 24.0 + 4.0 + 2.0
+R1 (live plan)              30.0 = 27.0 + 3.0 + 0.0
+```
+
+R1 adds 3.0 ew to the package by consuming the remaining headroom (2.0) and deliberately
+reducing the reserve (4.0 → 3.0). The commitment is renegotiated explicitly on the new
+feasibility record. Reports now show R1 against B: what was promised at approval versus what
+the plan says today. B is never edited.
