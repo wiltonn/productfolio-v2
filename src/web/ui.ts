@@ -280,7 +280,9 @@ export function numericCell(input: NumericCellInput): string {
     .map(([k, v]) => `<input type="hidden" name="${e(k)}" value="${e(v)}">`)
     .join('');
   const spoken = input.spoken ? ` ${input.spoken}` : '';
-  return `<div class="cell" data-field="${e(input.field)}" data-value="${e(input.value)}" data-label="${e(input.label)}">
+  return `<div class="cell" data-field="${e(input.field)}" data-value="${e(input.value)}" data-label="${e(input.label)}"${
+    input.unit === '%' ? ' data-suffix="%"' : ''
+  }>
   <span class="v">${e(input.display)}</span>
   <button type="button" class="edit" data-edit data-focus-key="${e(input.field)}"
     aria-label="Edit ${e(input.label)}, currently ${e(input.display)}">${PENCIL}</button>

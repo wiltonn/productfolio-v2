@@ -286,6 +286,8 @@ tr:hover .cell .edit, .cell .edit:focus-visible { color:var(--accent); border-co
 .cell .editor input[type="number"] { width:78px; }
 .cell .editor .unit { color:var(--ink-3); font-size:12.5px; }
 .hint { font-size:11px; color:var(--ink-3); text-align:right; margin-top:3px; max-width:150px; margin-left:auto; line-height:1.35; }
+/* A value handed to the save queue and waiting its turn: shown as typed, marked pending. */
+.cell.saving .v { color:var(--ink-3); }
 td.editing { background:var(--accent-tint) !important; }
 td.failed { background:var(--crit-tint) !important; }
 

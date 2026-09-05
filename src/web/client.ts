@@ -6,10 +6,20 @@
  *   - turns a numeric cell's plain form into a read-first inline editor;
  *   - posts that same form in the background and puts the server's re-rendered fragments
  *     back on the page, so an ordinary numeric edit needs no full reload;
- *   - keeps rapid edits and slow responses honest, with a per-field sequence number and a
- *     page-wide response ordinal, so a stale answer can never revert a newer value;
  *   - moves multi-field and destructive actions into native dialogs with real focus
  *     management.
+ *
+ * **Saves are serialized through one page-wide queue.** Only one mutation is ever in flight,
+ * and the next is not sent until the previous has been answered. That is what makes the
+ * figures trustworthy: a response is always rendered from state that already includes every
+ * earlier save, so the last answer is the final persisted state. Ordering the requests on
+ * the client and hoping the server processes them in that order does not work — request
+ * arrival can be reordered, and aborting a request does not un-write a save the server has
+ * already accepted.
+ *
+ * Two consequences the code relies on: a second edit of the same field while its save is
+ * still queued replaces the queued one rather than racing it, and a field waiting its turn
+ * keeps showing the value that was typed, marked as saving, until the server answers.
  *
  * What it deliberately does not do: recalculate capacity, reconciliation or feasibility.
  * A pending edit shows only the value that was typed; every derived figure on the page
@@ -22,17 +32,16 @@ export const APP_JS = String.raw`
 
   var SAVED_FLASH_MS = 1600;
 
-  /* ------------------------------------------------------------ save bookkeeping */
+  /* ------------------------------------------------------------ the mutation queue */
 
-  var fieldSeq = Object.create(null);   // field key -> sequence number issued
-  var fieldLatest = Object.create(null); // field key -> newest sequence number
-  var controllers = Object.create(null); // field key -> AbortController
-  var ordinal = 0;                       // page-wide request ordinal
-  var appliedOrdinal = 0;                // highest ordinal whose regions were applied
-  var inFlight = 0;
-  // Fields whose editor has been committed and is waiting for the server's answer. Their
-  // editors are not re-opened by a region swap: the fresh read state replaces them.
-  var settling = Object.create(null);
+  var queue = [];                        // mutations waiting to be sent, in order
+  var sending = null;                    // the one mutation in flight, or null
+  var queuedByKey = Object.create(null); // field key -> its queued (not yet sent) mutation
+  var settling = Object.create(null);    // field key -> the value awaiting persistence
+  var drainWaiters = [];
+  var reloading = false;                 // set when we navigate on purpose, drafts kept
+
+  function pendingCount() { return queue.length + (sending ? 1 : 0); }
 
   function live(message) {
     var el = document.getElementById('live-status');
@@ -51,25 +60,110 @@ export const APP_JS = String.raw`
   function flashSaved() {
     setSaveBar(savedHtml());
     window.setTimeout(function () {
-      if (inFlight === 0 && !document.querySelector('.cell.editing, .cell.failed')) setSaveBar('');
+      if (pendingCount() === 0 && !document.querySelector('.cell.editing, .cell.failed')) setSaveBar('');
     }, SAVED_FLASH_MS);
+  }
+
+  function cssEscape(value) { return String(value).replace(/["\\]/g, '\\$&'); }
+
+  /**
+   * A later edit of a field whose save has not left yet replaces it: the planner meant the
+   * newer number, and sending both would put two entries in the change log for one change.
+   */
+  function enqueue(entry) {
+    var queued = queuedByKey[entry.key];
+    if (queued) {
+      queued.action = entry.action;
+      queued.body = entry.body;
+      queued.label = entry.label;
+      queued.onSuccess = entry.onSuccess;
+      queued.onError = entry.onError;
+    } else {
+      queuedByKey[entry.key] = entry;
+      queue.push(entry);
+    }
+    pump();
+  }
+
+  function pump() {
+    if (sending) return;
+    if (!queue.length) { notifyDrained(); return; }
+
+    var entry = queue.shift();
+    if (queuedByKey[entry.key] === entry) delete queuedByKey[entry.key];
+    sending = entry;
+
+    setSaveBar(pendingHtml());
+    live('Saving ' + (entry.label || 'change') + '…');
+
+    fetch(entry.action, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: entry.body
+    }).then(function (response) {
+      return response.json().then(
+        function (payload) { return { status: response.status, payload: payload }; },
+        function () { return { status: response.status, payload: null }; }
+      );
+    }).then(function (result) {
+      finish(entry, result, null);
+    }).catch(function (error) {
+      finish(entry, null, error);
+    });
+  }
+
+  function finish(entry, result, error) {
+    sending = null;
+    delete settling[entry.key];
+
+    if (!error && result && result.payload && result.payload.ok) {
+      // Serialized sends mean this answer was rendered after every earlier save landed,
+      // so it is safe to take as the current state of the page.
+      applyRegions(result.payload.regions || {});
+      if (entry.onSuccess) entry.onSuccess();
+      if (pendingCount() === 0) flashSaved();
+      live(result.payload.status || 'Saved.');
+    } else {
+      var message = error
+        ? 'Couldn’t reach the server. Your value is kept — retry when the connection is back.'
+        : (result && result.payload && result.payload.message) || 'The change could not be saved.';
+      setSaveBar(failedHtml());
+      live('Not saved. ' + message);
+      if (entry.onError) entry.onError(message);
+    }
+
+    pump();
+  }
+
+  function whenDrained(fn) {
+    if (pendingCount() === 0) { fn(); return; }
+    drainWaiters.push(fn);
+  }
+
+  function notifyDrained() {
+    if (!drainWaiters.length) return;
+    var waiting = drainWaiters;
+    drainWaiters = [];
+    waiting.forEach(function (fn) { fn(); });
   }
 
   /* ------------------------------------------------------------ region swapping */
 
-  // Editors that are open when a region is replaced are re-opened afterwards, so a save
-  // on one row never discards what is being typed on another.
+  // Editors open when a region is replaced are re-opened afterwards, so a save on one row
+  // never discards what is being typed on another.
   function snapshotEditors() {
     var open = [];
     document.querySelectorAll('.cell.editing, .cell.failed').forEach(function (cell) {
-      if (settling[cell.getAttribute('data-field')]) return;
+      var field = cell.getAttribute('data-field');
+      if (settling[field]) return; // queued or in flight: it gets its saving state back instead
       var input = cell.querySelector('[data-input]');
       var err = cell.parentNode ? cell.parentNode.querySelector('.errbox') : null;
       open.push({
-        field: cell.getAttribute('data-field'),
+        field: field,
         value: input ? input.value : null,
         failed: cell.classList.contains('failed'),
-        error: err ? err.getAttribute('data-message') : null
+        error: err ? err.getAttribute('data-message') : null,
+        focused: !!input && document.activeElement === input
       });
     });
     return open;
@@ -80,19 +174,25 @@ export const APP_JS = String.raw`
       var cell = document.querySelector('.cell[data-field="' + cssEscape(state.field) + '"]');
       if (!cell) return;
       openEditor(cell, state.value, false);
-      if (state.failed && state.error) showCellError(cell, state.error);
+      if (state.failed && state.error) showCellError(cell, state.error, false);
+      if (state.focused) {
+        var input = cell.querySelector('[data-input]');
+        if (input) input.focus();
+      }
     });
   }
 
-  function cssEscape(value) { return String(value).replace(/["\\]/g, '\\$&'); }
+  /** A field still waiting its turn keeps showing what was typed, marked as saving. */
+  function restorePendingCells() {
+    Object.keys(settling).forEach(function (field) {
+      var cell = document.querySelector('.cell[data-field="' + cssEscape(field) + '"]');
+      if (cell) showPending(cell, settling[field]);
+    });
+  }
 
-  function applyRegions(regions, myOrdinal, focusAfter) {
-    // A response issued earlier than one already applied describes older state: drop it.
-    if (myOrdinal < appliedOrdinal) return false;
-    appliedOrdinal = myOrdinal;
-
-    var focusKey =
-      focusAfter || (document.activeElement ? document.activeElement.getAttribute('data-focus-key') : null);
+  function applyRegions(regions) {
+    var active = document.activeElement;
+    var focusKey = active ? active.getAttribute('data-focus-key') : null;
     var open = snapshotEditors();
 
     Object.keys(regions).forEach(function (key) {
@@ -101,25 +201,35 @@ export const APP_JS = String.raw`
     });
 
     restoreEditors(open);
-    if (focusKey) {
+    restorePendingCells();
+
+    // Focus is only moved when the swap actually took it away, so a save landing while the
+    // planner has moved on somewhere else does not pull them back.
+    if (focusKey && active && !document.body.contains(active)) {
       var refocus = document.querySelector('[data-focus-key="' + cssEscape(focusKey) + '"]');
       if (refocus) refocus.focus();
     }
-    return true;
   }
 
   /* ------------------------------------------------------------ inline cell editing */
 
   function cellOf(node) { return node.closest ? node.closest('.cell') : null; }
 
-  function openEditor(cell, value, select) {
+  /** What the field will be worth once everything queued for it has been saved. */
+  function currentValue(cell) {
+    var pending = cell.getAttribute('data-pending');
+    return pending === null ? cell.getAttribute('data-value') : pending;
+  }
+
+  function openEditor(cell, value, focus) {
     var input = cell.querySelector('[data-input]');
     if (!input) return;
     cell.classList.add('editing');
+    cell.classList.remove('saving');
     var td = cell.closest('td');
     if (td) td.classList.add('editing');
     if (value !== null && value !== undefined) input.value = value;
-    if (select !== false) {
+    if (focus !== false) {
       input.focus();
       if (input.select) input.select();
     }
@@ -127,11 +237,23 @@ export const APP_JS = String.raw`
 
   function closeEditor(cell, restoreValue) {
     var input = cell.querySelector('[data-input]');
-    if (input && restoreValue) input.value = cell.getAttribute('data-value');
+    if (input && restoreValue) input.value = currentValue(cell);
     cell.classList.remove('editing', 'failed');
     var td = cell.closest('td');
     if (td) td.classList.remove('editing', 'failed');
     clearCellError(cell);
+  }
+
+  function showPending(cell, value) {
+    cell.classList.remove('editing', 'failed');
+    cell.classList.add('saving');
+    var td = cell.closest('td');
+    if (td) td.classList.remove('editing', 'failed');
+    cell.setAttribute('data-pending', value);
+    var read = cell.querySelector('.v');
+    if (read) read.textContent = value + (cell.getAttribute('data-suffix') || '');
+    var input = cell.querySelector('[data-input]');
+    if (input) input.value = value;
   }
 
   function focusEditButton(cell) {
@@ -144,10 +266,13 @@ export const APP_JS = String.raw`
     if (!holder) return;
     var box = holder.querySelector('.errbox');
     if (box) box.remove();
+    var input = cell.querySelector('[data-input]');
+    if (input) input.removeAttribute('aria-invalid');
   }
 
-  function showCellError(cell, message) {
+  function showCellError(cell, message, focus) {
     clearCellError(cell);
+    cell.classList.remove('saving');
     cell.classList.add('failed');
     var td = cell.closest('td');
     if (td) td.classList.add('failed');
@@ -164,12 +289,12 @@ export const APP_JS = String.raw`
     var input = cell.querySelector('[data-input]');
     if (input) {
       input.setAttribute('aria-invalid', 'true');
-      input.focus();
+      if (focus !== false) input.focus();
     }
   }
 
   function unchanged(cell, raw) {
-    var previous = cell.getAttribute('data-value');
+    var previous = currentValue(cell);
     var a = Number(raw);
     var b = Number(previous);
     if (isFinite(a) && isFinite(b)) return a === b;
@@ -190,29 +315,31 @@ export const APP_JS = String.raw`
       return;
     }
     sendCell(cell, form);
+    focusEditButton(cell);
   }
 
-  // The committed field is put aside while it is in flight: a region swap replaces it with
-  // the server's fresh read state instead of re-opening what was typed, and focus returns
-  // to the cell's own edit button.
+  /**
+   * Hands the edit to the queue and returns the cell to a read state straight away, showing
+   * the typed value as saving. The editor comes back only if the server refuses it.
+   */
   function sendCell(cell, form) {
     var key = cell.getAttribute('data-field');
-    settling[key] = true;
-    submitForm(form, {
-      field: key,
-      focusAfter: key,
+    var input = form.querySelector('[data-input]');
+    var raw = input.value;
+
+    settling[key] = raw;
+    showPending(cell, raw);
+
+    enqueue({
+      key: key,
+      action: form.getAttribute('action'),
+      body: new URLSearchParams(new FormData(form)).toString(),
       label: cell.getAttribute('data-label') || 'value',
-      onPending: function () {
-        cell.classList.remove('failed');
-        var td = cell.closest('td');
-        if (td) td.classList.remove('failed');
-        clearCellError(cell);
-      },
-      onSettled: function () { delete settling[key]; },
       onError: function (message) {
         var current = document.querySelector('.cell[data-field="' + cssEscape(key) + '"]') || cell;
-        openEditor(current, form.querySelector('[data-input]').value, false);
-        showCellError(current, message);
+        current.removeAttribute('data-pending');
+        openEditor(current, raw, false);
+        showCellError(current, message, true);
       }
     });
   }
@@ -221,13 +348,14 @@ export const APP_JS = String.raw`
     var editBtn = event.target.closest('[data-edit]');
     if (editBtn) {
       var cell = cellOf(editBtn);
-      if (cell) openEditor(cell, cell.getAttribute('data-value'), true);
+      if (cell) openEditor(cell, currentValue(cell), true);
       return;
     }
     var retry = event.target.closest('[data-retry]');
     if (retry) {
       var rc = retry.closest('td').querySelector('.cell');
-      if (rc) commitCellForced(rc);
+      var form = rc && rc.querySelector('form[data-editform]');
+      if (rc && form) { clearCellError(rc); sendCell(rc, form); focusEditButton(rc); }
       return;
     }
     var discard = event.target.closest('[data-discard]');
@@ -236,17 +364,11 @@ export const APP_JS = String.raw`
       if (dc) {
         closeEditor(dc, true);
         focusEditButton(dc);
-        setSaveBar('');
+        if (pendingCount() === 0) setSaveBar('');
         live('Edit discarded.');
       }
     }
   });
-
-  // Retry re-sends whatever is in the box, including a value equal to the stored one.
-  function commitCellForced(cell) {
-    var form = cell.querySelector('form[data-editform]');
-    if (form) sendCell(cell, form);
-  }
 
   document.addEventListener('keydown', function (event) {
     var input = event.target.closest ? event.target.closest('[data-input]') : null;
@@ -260,13 +382,13 @@ export const APP_JS = String.raw`
       event.preventDefault();
       closeEditor(cell, true);
       focusEditButton(cell);
-      setSaveBar('');
+      if (pendingCount() === 0) setSaveBar('');
       live('Edit cancelled.');
     }
   });
 
-  // Commit on blur, but only when focus really left the cell, the editor is still open,
-  // and nothing is already being sent for it — so a blur following Enter is a no-op.
+  // Commit on blur, but only when focus really left the cell and the editor is still open,
+  // so a blur following Enter — which already closed it — is a no-op.
   document.addEventListener('focusout', function (event) {
     var input = event.target.closest ? event.target.closest('[data-input]') : null;
     if (!input) return;
@@ -277,77 +399,13 @@ export const APP_JS = String.raw`
       if (cell.contains(document.activeElement)) return;
       if (!cell.classList.contains('editing')) return;
       if (cell.classList.contains('failed')) return;
-      if (cell.getAttribute('data-sending') === '1') return;
       commitCell(cell);
     }, 0);
   });
 
-  /* ------------------------------------------------------------ posting */
-
-  function submitForm(form, options) {
-    var opts = options || {};
-    var key = opts.field || form.getAttribute('action');
-    var seq = (fieldSeq[key] = (fieldSeq[key] || 0) + 1);
-    fieldLatest[key] = seq;
-    var myOrdinal = ++ordinal;
-
-    if (controllers[key]) controllers[key].abort();
-    var controller = new AbortController();
-    controllers[key] = controller;
-
-    var cell = form.closest('.cell');
-    if (cell) cell.setAttribute('data-sending', '1');
-    if (opts.onPending) opts.onPending();
-
-    inFlight += 1;
-    setSaveBar(pendingHtml());
-    live('Saving ' + (opts.label || 'change') + '…');
-
-    return fetch(form.getAttribute('action'), {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(new FormData(form)).toString(),
-      signal: controller.signal
-    }).then(function (response) {
-      return response.json().then(function (payload) { return { status: response.status, payload: payload }; });
-    }).then(function (result) {
-      // An answer to a superseded edit of the same field is dropped entirely.
-      if (fieldLatest[key] !== seq) return;
-      if (cell) cell.removeAttribute('data-sending');
-
-      if (result.payload && result.payload.ok) {
-        // The regions are applied while the field is still set aside, so the swap replaces
-        // the committed editor with the server's read state instead of re-opening it.
-        applyRegions(result.payload.regions || {}, myOrdinal, opts.focusAfter);
-        if (opts.onSettled) opts.onSettled();
-        if (opts.onSuccess) opts.onSuccess(result.payload);
-        flashSaved();
-        live(result.payload.status || 'Saved.');
-        return;
-      }
-      if (opts.onSettled) opts.onSettled();
-      var message = (result.payload && result.payload.message) || 'The change could not be saved.';
-      setSaveBar(failedHtml());
-      live('Not saved. ' + message);
-      if (opts.onError) opts.onError(message);
-    }).catch(function (error) {
-      if (error && error.name === 'AbortError') return;
-      if (fieldLatest[key] !== seq) return;
-      if (cell) cell.removeAttribute('data-sending');
-      if (opts.onSettled) opts.onSettled();
-      var message = 'Couldn’t reach the server. Your value is kept — retry when the connection is back.';
-      setSaveBar(failedHtml());
-      live('Not saved. ' + message);
-      if (opts.onError) opts.onError(message);
-    }).then(function () {
-      inFlight -= 1;
-    });
-  }
-
   /* ------------------------------------------------------------ dialogs */
 
   var lastTrigger = null;
-  var reloading = false;  // set when a dialog save navigates on purpose
 
   function openDialog(id, trigger) {
     var dialog = document.getElementById(id);
@@ -391,11 +449,10 @@ export const APP_JS = String.raw`
   }, true);
 
   /**
-   * Multi-field and destructive actions post in the background for one reason only: so a
-   * rejected value stays in the dialog with everything the user typed still in it. They add
-   * and remove people, absences and work packages, which changes what the page contains —
-   * not just what its figures say — so on success the page is loaded afresh rather than
-   * patched. Ordinary numeric edits, which are the frequent ones, never reload.
+   * Multi-field and destructive actions post through the same queue, for one reason: so a
+   * rejected value stays in the dialog with everything that was typed still in it. On
+   * success the page is loaded afresh, but only once every other save has been answered and
+   * every unsaved draft elsewhere has been put somewhere safe.
    */
   document.addEventListener('submit', function (event) {
     var form = event.target;
@@ -406,16 +463,21 @@ export const APP_JS = String.raw`
 
     var submitButtons = form.querySelectorAll('button[type=submit], button:not([type])');
     submitButtons.forEach(function (b) { b.disabled = true; });
+    var backField = form.querySelector('input[name=back]');
+    var target = backField && backField.value ? backField.value : window.location.href;
 
-    submitForm(form, {
-      field: 'dialog:' + (dialog.id || form.getAttribute('action')),
+    enqueue({
+      key: 'dialog:' + (dialog.id || form.getAttribute('action')),
+      action: form.getAttribute('action'),
+      body: new URLSearchParams(new FormData(form)).toString(),
       label: form.getAttribute('data-label') || 'change',
       onSuccess: function () {
         submitButtons.forEach(function (b) { b.disabled = false; });
         closeDialog(dialog);
-        var backField = form.querySelector('input[name=back]');
-        reloading = true;
-        window.location.assign(backField && backField.value ? backField.value : window.location.href);
+        whenDrained(function () {
+          reloading = true;
+          window.location.assign(target);
+        });
       },
       onError: function (message) {
         submitButtons.forEach(function (b) { b.disabled = false; });
@@ -433,9 +495,8 @@ export const APP_JS = String.raw`
 
   /* ------------------------------------------------------------ row menus */
 
-  function closeMenus(except) {
+  function closeMenus() {
     document.querySelectorAll('.menu[data-open]').forEach(function (menu) {
-      if (menu === except) return;
       var trigger = menu.previousElementSibling;
       if (trigger) trigger.setAttribute('aria-expanded', 'false');
       menu.removeAttribute('data-open');
@@ -445,11 +506,11 @@ export const APP_JS = String.raw`
 
   document.addEventListener('click', function (event) {
     var dots = event.target.closest('.dots');
-    if (!dots) { closeMenus(null); return; }
+    if (!dots) { closeMenus(); return; }
     var menu = dots.nextElementSibling;
     if (!menu || !menu.classList.contains('menu')) return;
     var isOpen = menu.hasAttribute('data-open');
-    closeMenus(null);
+    closeMenus();
     if (isOpen) { dots.setAttribute('aria-expanded', 'false'); return; }
     menu.hidden = false;
     menu.setAttribute('data-open', '');
@@ -466,7 +527,7 @@ export const APP_JS = String.raw`
     if (event.key === 'Escape') {
       event.preventDefault();
       var trigger = menu.previousElementSibling;
-      closeMenus(null);
+      closeMenus();
       if (trigger) trigger.focus();
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -487,12 +548,17 @@ export const APP_JS = String.raw`
   /* ------------------------------------------------------------ leaving the page */
 
   window.addEventListener('beforeunload', function (event) {
-    if (reloading) return;
-    var dirty = document.querySelector('.cell.editing, .cell.failed');
-    if (inFlight === 0 && !dirty) return;
+    if (reloading) return; // a refresh that has already put the drafts somewhere safe
+    if (pendingCount() === 0 && !document.querySelector('.cell.editing, .cell.failed')) return;
     event.preventDefault();
     event.returnValue = '';
     return '';
   });
+
+  // Exposed for the browser regression tests, which need to know when the queue is idle.
+  window.__productfolio = {
+    pending: pendingCount,
+    settling: function () { return Object.keys(settling); }
+  };
 })();
 `;
